@@ -12,7 +12,7 @@ type
   private
     method get_length: Integer;
     class var fLength: method(aInstance: ^MonoObject; aEx: ^^MonoException): Integer;
-    class var fType: MZType := MZMonoRuntime.Instance.getType('System.String, mscorlib');
+    class var fType: MZType := MZMonoRuntime.Instance.getCoreType('System.String');
   public
     class method getType: MZType; override;
 

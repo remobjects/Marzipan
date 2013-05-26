@@ -14,7 +14,22 @@ type
   private
     method object: MZType;
     method string: MZType;
-    fObject, fString: MZType;
+    method boolean: MZType;
+    method byte: MZType;
+    method sbyte: MZType;
+    method int16: MZType;
+    method uint16: MZType;
+    method int32: MZType;
+    method uint32: MZType;
+    method int64: MZType;
+    method uint64: MZType;
+    method single: MZType;
+    method double: MZType;
+    method intptr: MZType;
+    method uintptr: MZType;
+    method char: MZType;
+    fVersion: String;
+    fObject, fString, fboolean, fbyte, fsbyte, fint16, fuint16, fint32, fuint32, fint64, fuint64, fsingle, fdouble, fintptr, fuintptr, fchar: MZType;
     fDomain: ^MonoDomain;
 
     fTypes: NSMutableDictionary := new NSMutableDictionary;
@@ -31,7 +46,23 @@ type
     property domain: ^MonoDomain read fDomain;
     method loadAssembly(aPath: NSString): MZMonoAssembly; 
     method getType(aFullName: NSString): MZType;
+    method getCoreType(aType: NSString; aAssembly: NSString := 'mscorlib'): MZType;
 
+    property byte: MZType read byte;
+    property sbyte: MZType read sbyte;
+    property int16: MZType read int16;
+    property uint16: MZType read uint16;
+    property int32: MZType read int32;
+    property uint32: MZType read uint32;
+    property int64: MZType read int64;
+    property uint64: MZType read uint64;
+    property single: MZType read single;
+    property double: MZType read double;
+    property intptr: MZType read intptr;
+    property uintptr: MZType read uintptr;
+    property char: MZType read char;
+    property boolean: MZType read boolean;
+ 
     property object: MZType read object;
     property string: MZType read string;
     finalizer;
@@ -90,6 +121,10 @@ type __system_object_equals_method = method(o: ^MonoObject): Boolean;
 constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String := 'v4.0.30319');
 begin
   if fInstance <> nil then raise new MZException  withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
+  if aVersion[0] = 'v' then 
+    fVersion := aVersion.substringFromIndex(1)
+  else
+    fVersion := aVersion;
   fInstance := self;
   fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
   mono_config_parse(nil);
@@ -118,6 +153,10 @@ end;
 constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
 begin
   if fInstance <> nil then raise new MZException  withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
+  if aVersion[0] = 'v' then 
+    fVersion := aVersion.substringFromIndex(1)
+  else
+    fVersion := aVersion;
   fInstance := self;
   if aLibPath <> nil then begin
     mono_set_dirs(aLibPath.UTF8String, aETCPath.UTF8String);
@@ -153,6 +192,109 @@ begin
     result := new MZType withType(ltmp);
     fTypes.setObject(result) forKey(aFullName); 
   end;
+end;
+
+method MZMonoRuntime.getCoreType(aType: NSString; aAssembly: NSString): MZType;
+begin
+  exit getType(NSString.stringWithFormat('%s, %s, Version=%s, Culture=neutral, PublicKeyToken=b77a5c561934e089', aType, aAssembly, fVersion));
+end;
+
+method MZMonoRuntime.boolean: MZType;
+begin
+  if fboolean = nil then 
+    fboolean := new MZType withType(mono_get_boolean_class);
+  exit fboolean;
+end;
+
+method MZMonoRuntime.byte: MZType;
+begin
+  if fbyte = nil then 
+    fbyte := new MZType withType(mono_get_byte_class);
+  exit fbyte;
+end;
+
+method MZMonoRuntime.sbyte: MZType;
+begin
+  if fsbyte = nil then 
+    fsbyte := new MZType withType(mono_get_sbyte_class);
+  exit fsbyte;
+end;
+
+method MZMonoRuntime.int16: MZType;
+begin
+  if fint16 = nil then 
+    fint16 := new MZType withType(mono_get_int16_class);
+  exit fint16;
+end;
+
+method MZMonoRuntime.uint16: MZType;
+begin
+  if fuint16 = nil then 
+    fuint16 := new MZType withType(mono_get_uint16_class);
+  exit fuint16;
+end;
+
+method MZMonoRuntime.int32: MZType;
+begin
+  if fint32 = nil then 
+    fint32 := new MZType withType(mono_get_int32_class);
+  exit fint32;
+end;
+
+method MZMonoRuntime.uint32: MZType;
+begin
+  if fuint32 = nil then 
+    fuint32 := new MZType withType(mono_get_uint32_class);
+  exit fuint32;
+end;
+
+method MZMonoRuntime.int64: MZType;
+begin
+  if fint64 = nil then 
+    fint64 := new MZType withType(mono_get_int64_class);
+  exit fint64;
+end;
+
+method MZMonoRuntime.uint64: MZType;
+begin
+  if fuint64 = nil then 
+    fuint64 := new MZType withType(mono_get_uint64_class);
+  exit fuint64;
+end;
+
+method MZMonoRuntime.single: MZType;
+begin
+  if fsingle = nil then 
+    fintptr := new MZType withType(mono_get_single_class);
+  exit fintptr;
+end;
+
+method MZMonoRuntime.double: MZType;
+begin
+  if fdouble = nil then 
+    fdouble := new MZType withType(mono_get_double_class);
+  exit fdouble;
+end;
+
+method MZMonoRuntime.intptr: MZType;
+begin
+  if fintptr = nil then 
+    fintptr := new MZType withType(mono_get_intptr_class);
+  exit fintptr;
+end;
+
+method MZMonoRuntime.uintptr: MZType;
+begin
+  if fuintptr = nil then 
+    fuintptr := new MZType withType(mono_get_uintptr_class);
+  exit fuintptr;
+end;
+
+method MZMonoRuntime.char: MZType;
+begin
+  if fchar = nil then
+    fchar := new MZType withType(mono_get_char_clasS);
+  exit fchar;
 end;
 
 
@@ -231,7 +373,7 @@ end;
 
 class method MZObject.getType: MZType;
 begin
-  exit MZMonoRuntime.Instance.getType('System.Object, mscorlib');
+  exit MZMonoRuntime.Instance.getCoreType('System.Object');
 end;
 
 constructor MZType withType(aType: ^MonoType);
