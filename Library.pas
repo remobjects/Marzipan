@@ -14,7 +14,7 @@ type
     class var fLength: method(aInstance: ^MonoObject; aEx: ^^MonoException): Integer;
     class var fType: MZType := MZMonoRuntime.Instance.getCoreType('System.String');
   public
-    class method getType: MZType; override;
+    class method getType: MZType; //override;
 
     class method fromNSString(s: NSString): MZString;
     property length: Integer read get_length;

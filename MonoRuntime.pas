@@ -196,7 +196,7 @@ end;
 
 method MZMonoRuntime.getCoreType(aType: NSString; aAssembly: NSString): MZType;
 begin
-  exit getType(NSString.stringWithFormat('%s, %s, Version=%s, Culture=neutral, PublicKeyToken=b77a5c561934e089', aType, aAssembly, fVersion));
+  exit getType(NSString.stringWithFormat('%@, %@, Version=%@, Culture=neutral, PublicKeyToken=b77a5c561934e089', aType, aAssembly, fVersion));
 end;
 
 method MZMonoRuntime.boolean: MZType;
@@ -265,8 +265,8 @@ end;
 method MZMonoRuntime.single: MZType;
 begin
   if fsingle = nil then 
-    fintptr := new MZType withType(mono_get_single_class);
-  exit fintptr;
+    fsingle := new MZType withType(mono_get_single_class);
+  exit fsingle;
 end;
 
 method MZMonoRuntime.double: MZType;
