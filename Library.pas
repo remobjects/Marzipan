@@ -12,14 +12,13 @@ type
   private
     method get_length: Integer;
     class var fLength: method(aInstance: ^MonoObject; aEx: ^^MonoException): Integer;
-    class var fType: MZType := MZMonoRuntime.Instance.getCoreType('System.String');
+    class var fType: MZType := MZMonoRuntime.sharedInstance.getCoreType('System.String');
   public
     class method getType: MZType; //override;
+    class method stringWithNSString(s: NSString): MZString;
 
-    class method fromNSString(s: NSString): MZString;
     property length: Integer read get_length;
-
-    method toNSString: NSString;
+    method NSString: NSString;
   end;
 
 implementation
@@ -39,15 +38,15 @@ begin
   if ex <> nil then raiseException(ex);
 end;
 
-class method MZString.fromNSString(s: NSString): MZString;
+class method MZString.stringWithNSString(s: NSString): MZString;
 begin
   if s = nil then exit nil;
   exit new MZString withMonoInstance(^MonoObject(mono_string_from_utf16(^mono_unichar2(s.cStringUsingEncoding(NSStringEncoding.NSUnicodeStringEncoding)))));
 end;
 
-method MZString.toNSString: NSString;
+method MZString.NSString: NSString;
 begin
-  exit nsstring.stringWithCharacters(^unichar(mono_string_chars(^MonoString(instance)))) length(mono_string_length(^MonoString(instance)));
+  exit NSString.stringWithCharacters(^unichar(mono_string_chars(^MonoString(instance)))) length(mono_string_length(^MonoString(instance)));
 end;
 
 end.

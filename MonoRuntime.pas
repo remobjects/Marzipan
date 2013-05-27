@@ -28,6 +28,7 @@ type
     method intptr: MZType;
     method uintptr: MZType;
     method char: MZType;
+    class method get_sharedInstance: MZMonoRuntime;
     fVersion: String;
     fObject, fString, fboolean, fbyte, fsbyte, fint16, fuint16, fint32, fuint32, fint64, fuint64, fsingle, fdouble, fintptr, fuintptr, fchar: MZType;
     fDomain: ^MonoDomain;
@@ -37,12 +38,12 @@ type
     fAssemblyNames: NSMutableDictionary := new NSMutableDictionary;
     class var fInstance: MZMonoRuntime;
   public
-    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String := 'v4.0.30319');
-    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String := 'v4.0.30319') lib(aLibPath: NSString) etc(aETCPath: NSString);
+    constructor withDomain(aDomain: NSString) appName(aAppName: NSString);
+    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String);
+    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
 
-    class property Instance: MZMonoRuntime read fInstance;
+    class property sharedInstance: MZMonoRuntime read get_sharedInstance;
     
-
     property domain: ^MonoDomain read fDomain;
     method loadAssembly(aPath: NSString): MZMonoAssembly; 
     method getType(aFullName: NSString): MZType;
@@ -78,7 +79,7 @@ type
 
     method getMethod(aSig: NSString): ^MonoMethod;
     method getMethodThunk(aSig: NSString): ^Void;
-    method Instantiate: ^MonoObject;
+    method instantiate: ^MonoObject;
   end;
 
   MZMonoAssembly = public class
@@ -118,9 +119,14 @@ implementation
 
 type __system_object_equals_method = method(o: ^MonoObject): Boolean;
 
-constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String := 'v4.0.30319');
+constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString);
 begin
-  if fInstance <> nil then raise new MZException  withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
+  result := initWithDomain(aDomain) appName(aAppName) version('v4.0.30319');
+end;
+
+constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String);
+begin
+  if fInstance <> nil then raise new MZException withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
   if aVersion[0] = 'v' then 
     fVersion := aVersion.substringFromIndex(1)
   else
@@ -129,6 +135,28 @@ begin
   fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
   mono_config_parse(nil);
   mono_thread_set_main (mono_thread_current ());
+end;
+
+constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
+begin
+  if fInstance <> nil then raise new MZException  withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
+  if aVersion[0] = 'v' then 
+    fVersion := aVersion.substringFromIndex(1)
+  else
+    fVersion := aVersion;
+  fInstance := self;
+  if aLibPath <> nil then begin
+    mono_set_dirs(aLibPath.UTF8String, aETCPath.UTF8String);
+  end;
+  
+  fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
+  mono_config_parse(nil);
+end;
+
+class method MZMonoRuntime.get_sharedInstance: MZMonoRuntime;
+begin
+  if not assigned(fInstance) then raise new MZException withName('MZException') reason('MZMonoRuntime not initialized') userInfo(nil);
+  result := fInstance;
 end;
 
 method MZMonoRuntime.object: MZType;
@@ -148,22 +176,6 @@ end;
 finalizer MZMonoRuntime;
 begin
   mono_jit_cleanup(fDomain);
-end;
-
-constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
-begin
-  if fInstance <> nil then raise new MZException  withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
-  if aVersion[0] = 'v' then 
-    fVersion := aVersion.substringFromIndex(1)
-  else
-    fVersion := aVersion;
-  fInstance := self;
-  if aLibPath <> nil then begin
-    mono_set_dirs(aLibPath.UTF8String, aETCPath.UTF8String);
-  end;
-  
-  fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
-  mono_config_parse(nil);
 end;
 
 method MZMonoRuntime.loadAssembly(aPath: NSString): MZMonoAssembly;
@@ -297,7 +309,6 @@ begin
   exit fchar;
 end;
 
-
 constructor MZMonoAssembly &assembly(aAssembly: ^MonoAssembly);
 begin
   fAssembly := aAssembly;
@@ -350,7 +361,7 @@ end;
 method MZObject.&equals(aOther: MZObject): Boolean;
 begin
   if fEquals = nil then
-    fEquals := MZMonoRuntime.Instance.object.getMethodThunk('System.Object:Equals(System.Object)');
+    fEquals := MZMonoRuntime.sharedInstance.object.getMethodThunk('System.Object:Equals(System.Object)');
   var lEquals: __system_object_equals_method;
   ^^Void(@lEquals)^ := fEquals;
   exit lEquals(if aOther = nil then nil else aOther.instance);
@@ -373,7 +384,7 @@ end;
 
 class method MZObject.getType: MZType;
 begin
-  exit MZMonoRuntime.Instance.getCoreType('System.Object');
+  exit MZMonoRuntime.sharedInstance.getCoreType('System.Object');
 end;
 
 constructor MZType withType(aType: ^MonoType);
@@ -394,9 +405,9 @@ begin
   exit mono_method_get_unmanaged_thunk(getMethod(aSig));
 end;
 
-method MZType.Instantiate: ^MonoObject;
+method MZType.instantiate: ^MonoObject;
 begin
-  exit mono_object_new(MZMonoRuntime.Instance.domain, mono_class_from_mono_type(fType));
+  exit mono_object_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(fType));
 end;
 
 

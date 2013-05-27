@@ -4,7 +4,7 @@
     <RootNamespace>RemObjects.Marzipan</RootNamespace>
     <ProjectGuid>b8a8b4bb-61d3-49b0-bafe-99016e5b3225</ProjectGuid>
     <OutputType>StaticLibrary</OutputType>
-    <AssemblyName>RemObjects.Marzipan</AssemblyName>
+    <AssemblyName>Marzipan</AssemblyName>
     <AllowGlobals>False</AllowGlobals>
     <AllowLegacyWith>False</AllowLegacyWith>
     <AllowLegacyOutParams>False</AllowLegacyOutParams>
@@ -16,6 +16,7 @@
     <Name>RemObjects.Marzipan</Name>
     <DefaultUses />
     <StartupClass />
+    <BundleIdentifier>com.remObjects.marzipan</BundleIdentifier>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <Optimize>false</Optimize>
@@ -39,9 +40,7 @@
   <ItemGroup>
     <Reference Include="CoreGraphics.fx" />
     <Reference Include="Foundation.fx" />
-    <Reference Include="libmono-2.0.fx">
-      <HintPath>..\libmono-2.0.fx</HintPath>
-    </Reference>
+    <Reference Include="libmono-2.0\OS X\libmono-2.0.fx" />
     <Reference Include="rtl.fx" />
     <Reference Include="libNougat.fx" />
   </ItemGroup>
