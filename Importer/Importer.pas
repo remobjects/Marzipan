@@ -67,6 +67,7 @@ begin
 
   for each el in fTypes do begin
     Log('Generating type '+el.FullName);
+
   end;
 
   Log('Generating code');

@@ -1,0 +1,3 @@
+[submodule "RemObjects.CodeGenerator"]
+	path = RemObjects.CodeGenerator
+	url = git@git.remobjects.com:products/codegen.git

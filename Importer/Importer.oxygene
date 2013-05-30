@@ -87,6 +87,15 @@
   <ItemGroup>
     <Folder Include="Properties\" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\RemObjects.CodeGenerator\RemObjects.CodeGenerator.oxygene">
+      <Name>RemObjects.CodeGenerator</Name>
+      <Project>{e1ec7063-1b75-4472-8bfb-18f6ed93380b}</Project>
+      <Private>True</Private>
+      <IsCirrusRef>True</IsCirrusRef>
+      <HintPath>..\RemObjects.CodeGenerator\bin\Debug\RemObjects.CodeGenerator.dll</HintPath>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Oxygene\RemObjects.Oxygene.Echoes.targets" />
   <PropertyGroup>
     <PreBuildEvent />
