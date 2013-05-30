@@ -6,7 +6,8 @@ uses
   System.Collections.Generic,
   System.Linq,
   System.Text,
-  Mono.Cecil;
+  Mono.Cecil,
+  RemObjects.CodeGenerator;
 
 type
   Importer = public class
@@ -15,6 +16,7 @@ type
     fLibraries: List<ModuleDefinition> := new List<ModuleDefinition>;
     fTypes: List<TypeDefinition> := new List<TypeDefinition>;
     fImportNameMapping: Dictionary<String, String> := new Dictionary<String,String>;
+    fFile: CGFile;
   protected
   public
     constructor(aSettings: ImporterSettings);
@@ -60,7 +62,16 @@ begin
     Log('Adding type '+lNewName+' from '+lLib[0].FullName);
     fImportNameMapping.Add(lLib[0].FullName, lNewName);
   end;
+  fFile := new CGFile;
+  fFile.Name := Path.GetFileNameWithoutExtension(fSettings.OutputFilename);
 
+  for each el in fTypes do begin
+    Log('Generating type '+el.FullName);
+  end;
+
+  Log('Generating code');
+  raise new NotImplementedException;
+  //new CGGenerator(
 end;
 
 end.
