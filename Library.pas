@@ -3,6 +3,7 @@
 interface
 
 uses
+  mono.utils,
   mono.jit,
   mono.metadata,
   Foundation;
@@ -14,7 +15,7 @@ type
     class var fLength: method(aInstance: ^MonoObject; aEx: ^^MonoException): Integer;
     class var fType: MZType := MZMonoRuntime.sharedInstance.getCoreType('System.String');
   public
-    class method getType: MZType; //override;
+    class method getType: MZType; override;
     class method stringWithNSString(s: NSString): MZString;
 
     property length: Integer read get_length;
