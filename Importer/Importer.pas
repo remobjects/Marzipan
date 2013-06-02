@@ -6,6 +6,7 @@ uses
   System.Collections.Generic,
   System.Linq,
   System.Text,
+  System.IO,
   Mono.Cecil,
   RemObjects.CodeGenerator;
 
@@ -63,11 +64,25 @@ begin
     fImportNameMapping.Add(lLib[0].FullName, lNewName);
   end;
   fFile := new CGFile;
+  fFile.Uses.Add('RemObjects.Marzipan');
   fFile.Name := Path.GetFileNameWithoutExtension(fSettings.OutputFilename);
-
+  
   for each el in fTypes do begin
     Log('Generating type '+el.FullName);
 
+    var lType := new CGNamedType();
+    lType.Name := 'Import_'+el.Name;
+    lType.Comment := 'Import of '+el.FullName+' from '+el.Scope.Name;
+    var lTypeDef := new CGTypeDefinition();
+    lType.Type := lTypeDef;
+
+    fFile.Types.Add(lType);
+    var lpt: String;
+    if not fImportNameMapping.TryGetValue(el.BaseType.FullName, out lpt) then
+      lpt := 'MZObject';
+    lTypeDef.ParentType := lpt;
+    lTypeDef.TDKind := CGTypeDefKind.Class;
+    
   end;
 
   Log('Generating code');
