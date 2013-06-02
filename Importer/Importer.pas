@@ -54,7 +54,7 @@ begin
   end;
   Log('Resolving types');
   for each el in fSettings.Types do begin
-    var lLib := fLibraries.SelectMany(a -> a.Types.Where(b -> b.FullName = el.Name)).ToArray;
+    var lLib := fLibraries.SelectMany(a -> a.Types.Where(b -> (not b.IsValueType) and (b.GenericParameters.Count = 0) and (b.FullName = el.Name))).ToArray; // Lets ignore those for a sec.
     if lLib.Count = 0 then
       raise new Exception('Type "'+el.Name+'" was not found')
     else
@@ -66,6 +66,8 @@ begin
   fFile := new CGFile;
   fFile.Uses.Add('RemObjects.Marzipan');
   fFile.Name := Path.GetFileNameWithoutExtension(fSettings.OutputFilename);
+  var lVars := new List<CGMember>;
+  var lMethods := new List<CGMember>;
   
   for each el in fTypes do begin
     Log('Generating type '+el.FullName);
@@ -83,6 +85,26 @@ begin
     lTypeDef.ParentType := lpt;
     lTypeDef.TDKind := CGTypeDefKind.Class;
     
+    for each meth in el.Methods do begin
+      if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
+      
+      //var lClassVar
+      //lTypeDef.Members.Insert(0, 
+    end;
+    for each elz in lVars do lTypeDef.Members.Add(elz);
+    lVars.Clear;
+    for each elz in lMethods do lTypeDef.Members.Add(elz);
+    lMethods.Clear;
+    var lFType := new CGField;
+    lFType.Static := true;
+    lFType.Access := CGAccessModifier.Private;
+    lFType.Name := 'fType';
+    lFType.Type := new CGNamedTypeRef('MZType');
+    var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.FullName+', '+el.Scope.Name)));
+    lCall.Self := new CGIdentifierExpression(ID := 'getType',
+      &Self := new CGIdentifierExpression(ID := 'Instance', 
+      &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZMonoRuntime'))));
+    lFType.Initializer := lCall;
   end;
 
   Log('Generating code');
