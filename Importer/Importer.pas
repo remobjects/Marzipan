@@ -21,7 +21,9 @@ type
   protected
   public
     constructor(aSettings: ImporterSettings);
+    method GetMonoType(aType: TypeReference): CGTypeRef;
     event Log: Action<String> raise;
+    property Output: String;
 
     method Run;
   end;
@@ -64,6 +66,8 @@ begin
     fImportNameMapping.Add(lLib[0].FullName, lNewName);
   end;
   fFile := new CGFile;
+  fFile.Comment := 'Marzipan import of '#13#10+
+    String.Join(#13#10, fLibraries.Select(a->'  '+a.Assembly.Name.ToString));
   fFile.Uses.Add('RemObjects.Marzipan');
   fFile.Name := Path.GetFileNameWithoutExtension(fSettings.OutputFilename);
   var lVars := new List<CGMember>;
@@ -85,9 +89,25 @@ begin
     lTypeDef.ParentType := lpt;
     lTypeDef.TDKind := CGTypeDefKind.Class;
     
-    for each meth in el.Methods do begin
+    for each meth in el.Methods index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
+      if meth.IsPrivate then continue;
       
+      var lFType := new CGField;
+      lFType.Static := true;
+      lFType.Access := CGAccessModifier.Private;
+      lFType.Name := 'f_'+n+'_'+meth.Name.Replace('.', '_');
+      var lMonoSig := new  CGMethod;
+      lMonoSig.MethodKind := CGMethodKind.Method;
+      lMonoSig.ResultType := GetMonoType(meth.ReturnType);
+      if meth.HasThis then
+        lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'instance', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'))));
+      for each elpar in meth.Parameters do begin
+        lMonoSig.Arguments.Add(new CGMethodArgument(Name := '_'+elpar.Name, &Type := GetMonoType(elpar.ParameterType)));
+      end;
+      lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'exception', &Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGNamedTypeRef('MonoException')))));
+      lFType.Type := new CGInlineDelegate(Signature := lMonoSig);
+      lVars.Add(lFType);
       //var lClassVar
       //lTypeDef.Members.Insert(0, 
     end;
@@ -105,11 +125,34 @@ begin
       &Self := new CGIdentifierExpression(ID := 'Instance', 
       &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZMonoRuntime'))));
     lFType.Initializer := lCall;
+    lTypeDef.Members.Add(lFType);
   end;
 
   Log('Generating code');
-  raise new NotImplementedException;
-  //new CGGenerator(
+  var lGenerator: CGGenerator;
+  case self.fSettings.OutputType of
+    OutputType.Nougat: lGenerator := new OxygeneGenerator;
+    else
+      lGenerator := new CSharpGenerator;
+  end;
+  lGenerator.Build(fFile);
+  Output := lGenerator.Output.ToString;
+  File.WriteAllText(fSettings.OutputFilename, Output);
+end;
+
+method Importer.GetMonoType(aType: TypeReference): CGTypeRef;
+begin
+  if aType.IsPinned then exit GetMonoType(aType.GetElementType);
+  if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
+  case aType.FullName of
+    'System.Int32': exit new CGPredefinedTypeRef(CGPredefinedType.Int32);
+    'System.String': exit new CGPointerTypeRef(new CGNamedTypeRef('MonoString'));
+    // TODO: Finish
+  end;
+  if aType.IsValueType then begin
+    assert(false);
+  end;
+  exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
 end;
 
 end.
