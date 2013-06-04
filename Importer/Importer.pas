@@ -22,6 +22,7 @@ type
   public
     constructor(aSettings: ImporterSettings);
     method GetMonoType(aType: TypeReference): CGTypeRef;
+    method GetMarzipanType(aType: TypeReference): CGTypeRef;
     event Log: Action<String> raise;
     property Output: String;
 
@@ -45,6 +46,10 @@ begin
   fImportNameMapping.Add('System.UInt64', 'uint64_t');
   fImportNameMapping.Add('System.IntPtr', 'intptr_t');
   fImportNameMapping.Add('System.UIntPtr', 'uintptr_t');
+  fImportNameMapping.Add('System.Char', 'uint16_t');
+  fImportNameMapping.Add('System.Single', 'float');
+  fImportNameMapping.Add('System.Double', 'double');
+  fImportNameMapping.Add('System.Boolean', 'Boolean');
 end;
 
 method Importer.Run;
@@ -88,6 +93,7 @@ begin
       lpt := 'MZObject';
     lTypeDef.ParentType := lpt;
     lTypeDef.TDKind := CGTypeDefKind.Class;
+
     
     for each meth in el.Methods index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
@@ -108,13 +114,25 @@ begin
       lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'exception', &Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGNamedTypeRef('MonoException')))));
       lFType.Type := new CGInlineDelegate(Signature := lMonoSig);
       lVars.Add(lFType);
-      //var lClassVar
-      //lTypeDef.Members.Insert(0, 
+      var lMeth := new CGMethod;
+      if meth.IsConstructor then 
+        lMeth.Name := 'init'
+      else
+        lMeth.Name := meth.Name;
+      lMethods.Add(lMeth);
+      lMeth.Static := meth.IsStatic;
+      lMeth.ResultType := GetMarzipanType(meth.ReturnType);
+      for i: Integer := 0 to meth.Parameters.Count -1 do begin
+        var lPar := new CGMethodArgument();
+        lMeth.Arguments.Add(lPar);
+        lPar.Name := '_'+meth.Parameters[i].Name;
+        if meth.Parameters[i].ParameterType.IsByReference then begin
+          lPAr.Type := GetMarzipanType(meth.Parameters[i].ParameterType.GetElementType);
+          lPAr.Modifier := CGMethodArgumentModifier.Var;
+        end else 
+          lPAr.Type := GetMarzipanType(meth.Parameters[i].ParameterType);
+      end;
     end;
-    for each elz in lVars do lTypeDef.Members.Add(elz);
-    lVars.Clear;
-    for each elz in lMethods do lTypeDef.Members.Add(elz);
-    lMethods.Clear;
     var lFType := new CGField;
     lFType.Static := true;
     lFType.Access := CGAccessModifier.Private;
@@ -126,6 +144,20 @@ begin
       &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZMonoRuntime'))));
     lFType.Initializer := lCall;
     lTypeDef.Members.Add(lFType);
+    for each elz in lVars do lTypeDef.Members.Add(elz);
+    lVars.Clear;
+    for each elz in lMethods do lTypeDef.Members.Add(elz);
+    lMethods.Clear;
+    var lGetType := new CGMethod;
+    lGEtType.Static := true;
+    lGetType.MethodKind := CGMethodKind.Method;
+    lGetType.Access := CGAccessModifier.Public;
+    lGetType.ResultType := 'MZType';
+    lGetType.Name := 'getType';
+    lGetType.Virtual := CGVirtualBits.Override;
+    lGetType.Body := new CGBeginStatement(new CGExitStatement(Value := new CGIdentifierExpression(ID := 'fType')));
+
+    lTypeDef.Members.Add(lGetType);
   end;
 
   Log('Generating code');
@@ -145,14 +177,39 @@ begin
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
   case aType.FullName of
-    'System.Int32': exit new CGPredefinedTypeRef(CGPredefinedType.Int32);
     'System.String': exit new CGPointerTypeRef(new CGNamedTypeRef('MonoString'));
-    // TODO: Finish
+    'System.Char': exit new CGPredefinedTypeRef(CGPredefinedType.Char);
+    'System.Single': exit new CGPredefinedTypeRef(CGPredefinedType.Single);
+    'System.Double': exit new CGPredefinedTypeRef(CGPredefinedType.Double);
+    'System.Boolean': exit new CGPredefinedTypeRef(CGPredefinedType.Boolean);
+    'System.SByte': exit new CGPredefinedTypeRef(CGPredefinedType.SByte);
+    'System.Byte': exit new CGPredefinedTypeRef(CGPredefinedType.Byte);
+    'System.Int16': exit new CGPredefinedTypeRef(CGPredefinedType.Int16);
+    'System.UInt16': exit new CGPredefinedTypeRef(CGPredefinedType.UInt16);
+    'System.Int32': exit new CGPredefinedTypeRef(CGPredefinedType.Int32);
+    'System.UInt32': exit new CGPredefinedTypeRef(CGPredefinedType.UInt32);
+    'System.Int64': exit new CGPredefinedTypeRef(CGPredefinedType.Int64);
+    'System.UInt64': exit new CGPredefinedTypeRef(CGPredefinedType.UInt64);
+    'System.IntPtr': exit new CGPredefinedTypeRef(CGPredefinedType.IntPtr);
+    'System.UIntPtr': exit new CGPredefinedTypeRef(CGPredefinedType.UIntPtr);
   end;
   if aType.IsValueType then begin
+    Log('Type: '+aType+' is a value type and is currently not supported');
     assert(false);
   end;
   exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
+end;
+
+method Importer.GetMarzipanType(aType: TypeReference): CGTypeRef;
+begin
+  if aType.FullName = 'System.Void' then exit nil;
+  if aType.IsPinned then exit GetMonoType(aType.GetElementType);
+  if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
+  var lRes: String;
+  if self.fImportNameMapping.TryGetValue(aType.FullName, out lRes) then
+    exit lRes;
+  exit new CGNamedTypeRef('MZObject');
+
 end;
 
 end.
