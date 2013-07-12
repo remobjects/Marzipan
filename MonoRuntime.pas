@@ -99,7 +99,7 @@ type
   end;
 
   MZObject = public class
-  private
+  protected
     fInstance: ^MonoObject;
     fHandle: Int32;
     class var fEquals: ^Void;
