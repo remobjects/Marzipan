@@ -24,10 +24,10 @@ type
     method int64: MZType;
     method uint64: MZType;
     method single: MZType;
-    method double: MZType;
+    method _double: MZType;
     method intptr: MZType;
     method uintptr: MZType;
-    method char: MZType;
+    method _char: MZType;
     class method get_sharedInstance: MZMonoRuntime;
     fVersion: String;
     fObject, fString, fboolean, fbyte, fsbyte, fint16, fuint16, fint32, fuint32, fint64, fuint64, fsingle, fdouble, fintptr, fuintptr, fchar: MZType;
@@ -58,10 +58,10 @@ type
     property int64: MZType read int64;
     property uint64: MZType read uint64;
     property single: MZType read single;
-    property double: MZType read double;
+    property _double: MZType read _double;
     property intptr: MZType read intptr;
     property uintptr: MZType read uintptr;
-    property char: MZType read char;
+    property _char: MZType read _char;
     property boolean: MZType read boolean;
  
     property object: MZType read object;
@@ -281,7 +281,7 @@ begin
   exit fsingle;
 end;
 
-method MZMonoRuntime.double: MZType;
+method MZMonoRuntime._double: MZType;
 begin
   if fdouble = nil then 
     fdouble := new MZType withType(mono_get_double_class);
@@ -302,7 +302,7 @@ begin
   exit fuintptr;
 end;
 
-method MZMonoRuntime.char: MZType;
+method MZMonoRuntime._char: MZType;
 begin
   if fchar = nil then
     fchar := new MZType withType(mono_get_char_clasS);

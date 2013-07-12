@@ -14,6 +14,7 @@ Global
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
 		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Debug|Mixed Platforms.ActiveCfg = Debug
+		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Debug|Mixed Platforms.Build.0 = Debug
 		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|Mixed Platforms.ActiveCfg = Release
 		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|Mixed Platforms.Build.0 = Release
 		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Debug|Mixed Platforms.ActiveCfg = Debug

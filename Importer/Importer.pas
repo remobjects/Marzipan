@@ -5,20 +5,31 @@ interface
 uses
   System.Collections.Generic,
   System.Linq,
+  System.Reflection,
   System.Text,
   System.IO,
   Mono.Cecil,
   RemObjects.CodeGenerator;
 
 type
-  Importer = public class
+  Importer = public class(IAssemblyResolver)
   private
+    method LoadAsm(el: String): ModuleDefinition;
     fSettings: ImporterSettings;
     fLibraries: List<ModuleDefinition> := new List<ModuleDefinition>;
     fTypes: List<TypeDefinition> := new List<TypeDefinition>;
     fImportNameMapping: Dictionary<String, String> := new Dictionary<String,String>;
+    fEnumTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
+    fValueTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
+    fPaths: Hashset<String> := new HashSet<String>;
+    fLoaded: Dictionary<String, ModuleDefinition> := new Dictionary<String,ModuleDefinition>;
     fFile: CGFile;
+    fResolver:  DefaultAssemblyResolver := new  DefaultAssemblyResolver();
   protected
+    method Resolve(fullName: String): AssemblyDefinition;
+    method Resolve(fullName: String; parameters: ReaderParameters): AssemblyDefinition;
+    method Resolve(name: AssemblyNameReference): AssemblyDefinition;
+    method Resolve(name: AssemblyNameReference; parameters: ReaderParameters): AssemblyDefinition;
   public
     constructor(aSettings: ImporterSettings);
     method GetMonoType(aType: TypeReference): CGTypeRef;
@@ -56,8 +67,7 @@ method Importer.Run;
 begin
   Log('Loading libraries');
   for each el in fSettings.Libraries do begin
-    Log('  Loading '+el);
-    fLibraries.Add(ModuleDefinition.ReadModule(el));
+    LoadAsm(el);
   end;
   Log('Resolving types');
   for each el in fSettings.Types do begin
@@ -78,11 +88,14 @@ begin
   var lVars := new List<CGMember>;
   var lMethods := new List<CGMember>;
   
+  var lNames: HashSet<String> := new HashSet<String>;
+  var lMethodMap: Dictionary<MethodDefinition, CGMethod> := new Dictionary<MethodDefinition,CGMethod>;
   for each el in fTypes do begin
     Log('Generating type '+el.FullName);
+    lMethodMap.Clear;
 
     var lType := new CGNamedType();
-    lType.Name := 'Import_'+el.Name;
+    lType.Name := el.Name;
     lType.Comment := 'Import of '+el.FullName+' from '+el.Scope.Name;
     var lTypeDef := new CGTypeDefinition();
     lType.Type := lTypeDef;
@@ -93,11 +106,11 @@ begin
       lpt := 'MZObject';
     lTypeDef.ParentType := lpt;
     lTypeDef.TDKind := CGTypeDefKind.Class;
-
-    
+    lNames.Clear;
+    lMethodMap.Clear;
     for each meth in el.Methods index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
-      if meth.IsPrivate then continue;
+      if not meth.IsPublic then continue;
       
       var lFType := new CGField;
       lFType.Static := true;
@@ -105,6 +118,7 @@ begin
       lFType.Name := 'f_'+n+'_'+meth.Name.Replace('.', '_');
       var lMonoSig := new  CGMethod;
       lMonoSig.MethodKind := CGMethodKind.Method;
+      if (meth.ReturnType.FullName <> 'System.Void') then
       lMonoSig.ResultType := GetMonoType(meth.ReturnType);
       if meth.HasThis then
         lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'instance', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'))));
@@ -115,10 +129,20 @@ begin
       lFType.Type := new CGInlineDelegate(Signature := lMonoSig);
       lVars.Add(lFType);
       var lMeth := new CGMethod;
+      lMethodMap[meth] := lMeth;
       if meth.IsConstructor then 
         lMeth.Name := 'init'
       else
         lMeth.Name := meth.Name;
+      if lNames.Contains(lMeth.Name) then
+        for i: Integer := 2 to Int32.MaxValue -1 do begin
+          if not lNames.Contains(lMeth.Name+i) then begin
+            lMeth.Name := lMeth.Name+i;
+            break;
+          end;
+            
+        end;
+      lNames.Add(lMeth.Name);
       lMethods.Add(lMeth);
       lMeth.Static := meth.IsStatic;
       lMeth.ResultType := GetMarzipanType(meth.ReturnType);
@@ -127,12 +151,41 @@ begin
         lMeth.Arguments.Add(lPar);
         lPar.Name := '_'+meth.Parameters[i].Name;
         if meth.Parameters[i].ParameterType.IsByReference then begin
-          lPAr.Type := GetMarzipanType(meth.Parameters[i].ParameterType.GetElementType);
-          lPAr.Modifier := CGMethodArgumentModifier.Var;
+          lPar.Type := GetMarzipanType(meth.Parameters[i].ParameterType.GetElementType);
+          lPar.Modifier := CGMethodArgumentModifier.Var;
         end else 
-          lPAr.Type := GetMarzipanType(meth.Parameters[i].ParameterType);
+          lPar.Type := GetMarzipanType(meth.Parameters[i].ParameterType);
       end;
     end;
+
+    var lProperties := new List<CGProperty>;
+
+    for each prop in el.Properties do begin
+      if not (((prop.GetMethod <> nil) and (prop.GetMethod.IsPublic)) or ((prop.SetMethod <> nil) and (prop.SetMethod.IsPublic)))then continue;
+      var lProp := new CGProperty();
+      lProp.Access := CGAccessModifier.Public;
+      lProp.Name := prop.Name;
+      lProp.Type := GetMonoType(prop.PropertyType);
+      if prop.GetMethod <> nil then begin
+        var lMeth := lMethodMap[prop.GetMethod];
+        lMeth.Access := CGAccessModifier.Private;
+        lMeth.Name := prop.Name;
+
+        lProp.Read := new CGIdentifierExpression(ID := prop.Name);
+      end;
+
+      if prop.SetMethod <> nil then begin
+        var lMeth := lMethodMap[prop.SetMethod];
+        lMeth.Access := CGAccessModifier.Private;
+        // move to top
+        lMeth.Name := 'set'+prop.Name;
+
+        lProp.Write := new CGIdentifierExpression(ID := 'set'+prop.Name);
+      end;
+      lProperties .Add(lProp);
+    end;
+
+
     var lFType := new CGField;
     lFType.Static := true;
     lFType.Access := CGAccessModifier.Private;
@@ -146,10 +199,12 @@ begin
     lTypeDef.Members.Add(lFType);
     for each elz in lVars do lTypeDef.Members.Add(elz);
     lVars.Clear;
-    for each elz in lMethods do lTypeDef.Members.Add(elz);
+    for each elz in lMethods.Where(a->a.Access = CGAccessModifier.Private) do lTypeDef.Members.Add(elz);
+    for each elz in lMethods.Where(a->a.Access = CGAccessModifier.Public) do lTypeDef.Members.Add(elz);
+    for each elz in lProperties do lTypeDef.Members.Add(elz);
     lMethods.Clear;
     var lGetType := new CGMethod;
-    lGEtType.Static := true;
+    lGetType.Static := true;
     lGetType.MethodKind := CGMethodKind.Method;
     lGetType.Access := CGAccessModifier.Public;
     lGetType.ResultType := 'MZType';
@@ -158,6 +213,40 @@ begin
     lGetType.Body := new CGBeginStatement(new CGExitStatement(Value := new CGIdentifierExpression(ID := 'fType')));
 
     lTypeDef.Members.Add(lGetType);
+  end;
+
+  for each el in fEnumTypes index n do begin
+    var lType := new CGNamedType();
+    lType.Name := fImportNameMapping[el.FullName];
+    lType.Comment := 'Import of '+el.FullName+' from '+el.Scope.Name;
+    var lTypeDef := new CGTypeDefinition();
+    lType.Type := lTypeDef;
+    lTypeDef.TDKind := CGTypeDefKind.Enum;
+    lTypeDef.ParentType := GetMonoType(el.Fields.Single(a->a.IsStatic = false).FieldType);
+    for each lConst in el.Fields.Where(a->a.IsLiteral) do begin
+      lTypeDef.Members.Add(
+        new CGField(Constant := true, Name := lConst.Name, Initializer := new CGInt64Expression(Value := Convert.ToInt64(lConst.Constant)), &Type := lType.Name, &Static := true));
+    end;
+
+    fFile.Types.Insert(n, lType);
+    
+  end;
+  var lStart := fEnumTypes.Count;
+
+  for each el in fValueTypes index n do begin
+    var lType := new CGNamedType();
+    lType.Name := fImportNameMapping[el.FullName];
+    lType.Comment := 'Import of '+el.FullName+' from '+el.Scope.Name;
+    var lTypeDef := new CGTypeDefinition();
+    lType.Type := lTypeDef;
+    lTypeDef.TDKind := CGTypeDefKind.Record;
+    for each lConst in el.Fields.Where(a->a.IsStatic = false) do begin
+      lTypeDef.Members.Add(
+        new CGField(Name := lConst.Name, &Type := GetMonoType(lConst.FieldType)));
+    end;
+
+    fFile.Types.Insert(n + lStart, lType);
+    
   end;
 
   Log('Generating code');
@@ -193,9 +282,18 @@ begin
     'System.IntPtr': exit new CGPredefinedTypeRef(CGPredefinedType.IntPtr);
     'System.UIntPtr': exit new CGPredefinedTypeRef(CGPredefinedType.UIntPtr);
   end;
-  if aType.IsValueType then begin
-    Log('Type: '+aType+' is a value type and is currently not supported');
-    assert(false);
+  var lType := aType.Resolve;
+  var lStr: String;
+  if fImportNameMapping.TryGetValue(lType.FullName, out lStr) then exit lStr;
+  if lType.IsEnum then begin
+    fEnumTypes.Add(lType);
+    fImportNameMapping.Add(lType.FullName, lType.Name);
+    exit lType.Name;
+  end;
+  if lType.IsValueType then begin
+    fValueTypes.Add(lType);
+    fImportNameMapping.Add(lType.FullName, lType.Name);
+    exit lType.Name;
   end;
   exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
 end;
@@ -210,6 +308,50 @@ begin
     exit lRes;
   exit new CGNamedTypeRef('MZObject');
 
+end;
+
+method Importer.Resolve(fullName: String): AssemblyDefinition;
+begin
+  raise new NotImplementedException;
+end;
+
+method Importer.Resolve(fullName: String; parameters: ReaderParameters): AssemblyDefinition;
+begin
+  raise new NotImplementedException;
+end;
+
+method Importer.Resolve(name: AssemblyNameReference): AssemblyDefinition;
+begin
+  var lTmp: ModuleDefinition;
+  if fLoaded.TryGetValue(name.ToString, out lTmp) then exit lTmp.Assembly;
+  for each el in fPaths do begin
+    if File.Exists(Path.Combine(el, name.Name+'.dll')) then
+      exit LoadAsm(Path.Combine(el, name.Name+'.dll')).Assembly;
+    if File.Exists(Path.Combine(el, name.Name+'.exe')) then
+      exit LoadAsm(Path.Combine(el, name.Name+'.exe')).Assembly;
+    if File.Exists(Path.Combine(el, name.Name+'.DLL')) then
+      exit LoadAsm(Path.Combine(el, name.Name+'.DLL')).Assembly;
+    if File.Exists(Path.Combine(el, name.Name+'.EXE')) then
+      exit LoadAsm(Path.Combine(el, name.Name+'.EXE')).Assembly;
+  end;
+  exit fResolver.Resolve(name);
+end;
+
+method Importer.Resolve(name: AssemblyNameReference; parameters: ReaderParameters): AssemblyDefinition;
+begin
+  raise new NotImplementedException;
+end;
+
+method Importer.LoadAsm(el: String): ModuleDefinition;
+begin
+  var rp := new ReaderParameters(ReadingMode.Deferred);
+  rp.AssemblyResolver := self;
+  Log('  Loading '+el);
+  fPaths.Add(Path.GetDirectoryName(el));
+  var md := ModuleDefinition.ReadModule(el, rp);
+  fLibraries.Add(md);
+  fLoaded.Add(md.Assembly.Name.ToString, md);
+  exit md;
 end;
 
 end.
