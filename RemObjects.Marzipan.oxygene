@@ -41,7 +41,7 @@
     <Reference Include="CoreGraphics.fx" />
     <Reference Include="Foundation.fx" />
     <Reference Include="libmono-2.0.fx">
-      <HintPath>C:\Users\Carlo\Dropbox\Oxygene (1)\libmono-2.0\OS X\libmono-2.0.fx</HintPath>
+      <HintPath>libmono-2.0\OS X\libmono-2.0.fx</HintPath>
     </Reference>
     <Reference Include="rtl.fx" />
     <Reference Include="libNougat.fx" />
