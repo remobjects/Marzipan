@@ -17,6 +17,7 @@ type
   private
     method LoadAsm(el: String): ModuleDefinition;
     method WrapObject(aVal: CGIdentifierExpression; aType: CGTypeRef): CGExpression;
+    method SigTypeToString(aType: TypeReference): String;
     fSettings: ImporterSettings;
     fLibraries: List<ModuleDefinition> := new List<ModuleDefinition>;
     fTypes: List<TypeDefinition> := new List<TypeDefinition>;
@@ -461,7 +462,7 @@ end;
 
 method Importer.GetMethodSignature(aSig: MethodDefinition): String;
 begin
-  exit ':'+aSig.Name+'('+String.Join(',', aSig.Parameters.Select(a->a.ParameterType.ToString))+')';
+  exit ':'+aSig.Name+'('+String.Join(',', aSig.Parameters.Select(a->SigTypeToString(a.ParameterType)))+')';
 end;
 
 method Importer.IsObjectRef(aType: TypeReference): Boolean;
@@ -477,6 +478,38 @@ begin
   new CGIfExpression(Condition := new CGBinaryExpression(&Left := aVal, Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
     &True := new CGNilExpression(), &False := new CGNewExpression([new CGArgument(Prefix := 'withMonoInstance',value := new CGCastExpression(&Type := new CGPointerTypeRef('MonoObject'), Value := aVal))], &Type := aType));
             
+end;
+
+method Importer.SigTypeToString(aType: TypeReference): String;
+begin
+  if aType = nil then exit nil;
+  case aType.MetadataType of
+    MetadataType.Array: exit SigTypeToString(AType.GetElementType)+'[]';
+    MetadataType.Boolean: exit 'bool';
+    MetadataType.ByReference: exit SigTypeToString(AType.GetElementType)+'&';
+    MetadataType.Byte: exit 'unsigned int8';
+    MetadataType.Int16: exit 'unsigned int16';
+    MetadataType.Int32: exit 'unsigned int32';
+    MetadataType.Int64: exit 'unsigned int64';
+    MetadataType.SByte: exit 'int8';
+    MetadataType.UInt16: exit 'int16';
+    MetadataType.UInt32: exit 'int32';
+    MetadataType.UInt64: exit 'int64';
+    MetadataType.Char: exit 'char';
+    Metadatatype.Double: exit 'double';
+    MetadataType.IntPtr: exit 'native int';
+    MetadataType.UIntPtr: exit 'native unsigned int';
+    MetadataType.Single: exit 'single';
+    MetadataType.Void: exit 'void';
+    MetadataType.Pointer: exit SigTypeToString(AType.GetElementType)+'*';
+    MetadataType.GenericInstance: exit SigTypeToString(GenericInstanceType(aType).ElementType)+'<'+String.Join(',', GenericInstanceType(aType).GenericArguments.ToArray)+'>';
+    Metadatatype.Object: exit 'object';
+    metadatatype.String: exit 'string';
+    Metadatatype.Class,
+    MEtadataType.ValueType: exit aType.ToString;
+   else
+     assert(False);
+  end;
 end;
 
 end.
