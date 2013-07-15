@@ -135,7 +135,7 @@ begin
         lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'instance', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'))));
       for each elpar in meth.Parameters do begin
         lMonoSig.Arguments.Add(new CGMethodArgument(Name := '_'+elpar.Name, &Type := if elpar.ParameterType.IsByReference 
-        then new CGPointerTypeRef( GetMonoType(elpar.ParameterType)) else GetMonoType(elpar.ParameterType)));
+        then new CGPointerTypeRef( GetMonoType(elpar.ParameterType.GetElementType)) else GetMonoType(elpar.ParameterType)));
       end;
       lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'exception', &Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGNamedTypeRef('MonoException')))));
       lFType.Type := new CGInlineDelegate(Signature := lMonoSig);
@@ -368,7 +368,8 @@ method Importer.GetMonoType(aType: TypeReference): CGTypeRef;
 begin
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer  then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
-  if aType.IsArray then exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
+  if aType.IsArray then exit new CGPointerTypeRef(new CGNamedTypeRef('MonoArray'));
+  if aType.IsArray then exit new CGPointerTypeRef(new CGNamedTypeRef('MonoArray'));
   case aType.FullName of
     'System.String': exit new CGPointerTypeRef(new CGNamedTypeRef('MonoString'));
     'System.Object': exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
@@ -391,13 +392,17 @@ begin
   //var lStr: String;
   //if fImportNameMapping.TryGetValue(lType.FullName, out lStr) then exit lStr;
   if lType.IsEnum then begin
-    fEnumTypes.Add(lType);
-    fImportNameMapping.Add(lType.FullName, lType.Name);
+    if not fEnumTypes.Contains(lType) then begin
+      fEnumTypes.Add(lType);
+      fImportNameMapping.Add(lType.FullName, lType.Name);
+    end;
     exit lType.Name;
   end;
   if lType.IsValueType then begin
-    fValueTypes.Add(lType);
-    fImportNameMapping.Add(lType.FullName, lType.Name);
+    if not fValueTypes.Contains(lType) Then begin
+      fValueTypes.Add(lType);
+      fImportNameMapping.Add(lType.FullName, lType.Name);
+    end;
     exit lType.Name;
   end;
   exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
@@ -408,7 +413,12 @@ begin
   if aType.FullName = 'System.Void' then exit nil;
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
-  if aType.IsArray then exit new CGNamedTypeRef('MZObject');
+  if aType.IsArray then begin 
+    if aType.GetElementType.IsValueType then 
+      exit new CGNamedTypeRef('MZObject')
+    else
+      exit new CGNamedTypeRef('MZArray')
+  end;
   var lRes: String;
   if self.fImportNameMapping.TryGetValue(aType.FullName, out lRes) then
     exit lRes;
@@ -487,14 +497,14 @@ begin
     MetadataType.Array: exit SigTypeToString(AType.GetElementType)+'[]';
     MetadataType.Boolean: exit 'bool';
     MetadataType.ByReference: exit SigTypeToString(AType.GetElementType)+'&';
-    MetadataType.Byte: exit 'unsigned int8';
-    MetadataType.Int16: exit 'unsigned int16';
-    MetadataType.Int32: exit 'unsigned int32';
-    MetadataType.Int64: exit 'unsigned int64';
-    MetadataType.SByte: exit 'int8';
-    MetadataType.UInt16: exit 'int16';
-    MetadataType.UInt32: exit 'int32';
-    MetadataType.UInt64: exit 'int64';
+    MetadataType.Byte: exit 'byte';
+    MetadataType.Int16: exit 'short';
+    MetadataType.Int32: exit 'int';
+    MetadataType.Int64: exit 'long';
+    MetadataType.SByte: exit 'sbyte';
+    MetadataType.UInt16: exit 'ushort';
+    MetadataType.UInt32: exit 'uint';
+    MetadataType.UInt64: exit 'ulong';
     MetadataType.Char: exit 'char';
     Metadatatype.Double: exit 'double';
     MetadataType.IntPtr: exit 'native int';
