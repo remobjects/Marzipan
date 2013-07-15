@@ -169,7 +169,9 @@ begin
                 &Self := new CGIdentifierExpression(ID := 'getMethodThunk', &Self := new CGIdentifierExpression(ID := 'fType'))),
             Dest := 
               new CGUnaryExpression(&Operator := CGUnaryOperator.Dereference,
-                value := new CGCastExpression(&Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGPredefinedTypeRef(CGPredefinedType.Void))), Value := new CGIdentifierExpression(ID := lFType.Name))))));
+                value := new CGCastExpression(&Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGPredefinedTypeRef(CGPredefinedType.Void))), Value := 
+                  new CGUnaryExpression(&Operator := CGUnaryOperator.AddressOf,
+                  Value := new CGIdentifierExpression(ID := lFType.Name)))))));
 
        lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'ex', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoException')), Initializer := new CGNilExpression())]));
 
@@ -291,7 +293,7 @@ begin
     lFType.Access := CGAccessModifier.Private;
     lFType.Name := 'fType';
     lFType.Type := new CGNamedTypeRef('MZType');
-    var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.FullName+', '+el.Scope.Name)));
+    var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.FullName+', '+ModuleDefinition(el.Scope).Assembly.Name.Name)));
     lCall.Self := new CGIdentifierExpression(ID := 'getType',
       &Self := new CGIdentifierExpression(ID := 'sharedInstance', 
       &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZMonoRuntime'))));
