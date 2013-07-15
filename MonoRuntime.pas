@@ -337,7 +337,7 @@ end;
 
 constructor MZObject withMonoInstance(aInstance: ^MonoObject);
 begin
-  fHandle := mono_gchandle_new(aInstance, 0);
+  fHandle := mono_gchandle_new(aInstance, 1);
   fInstance := aInstance;
 end;
 
