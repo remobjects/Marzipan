@@ -20,6 +20,8 @@ begin
   x.OutputFilename := '.\output.pas';
   x.OutputType := OutputType.Nougat;
   x.Types.Add(new ImportType(Name := 'RemObjects.Oxygene.Code.Compiler.CodeCompletionCompiler'));
+  x.Types.Add(new ImportType(Name := 'RemObjects.Oxygene.Code.CCListItem'));
+  x.Types.Add(new ImportType(Name := 'RemObjects.Oxygene.Model.CCListItemCollection'));
   x.Libraries.Add('c:\projects\oxygene\bin\RemObjects.Oxygene.tools.dll');
   x.Libraries.Add('c:\projects\oxygene\bin\RemObjects.Oxygene.dll');
   var lWorker := new Importer(x);

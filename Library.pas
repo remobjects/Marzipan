@@ -22,6 +22,18 @@ type
     method NSString: NSString;
   end;
 
+  MZArray = public class(MZObject)
+  private
+  public
+    property &type: &Class := typeOf(MZObject);
+    property elements: ^^MonoObject read ^^MonoObject(mono_array_addr_with_size(^MonoArray(instance), sizeOf(^MonoObject), 0));
+    property count: Integer read mono_array_length(^MonoArray(instance));
+    method objectAtIndex(aIndex: Integer): MZObject;
+    method objectAtIndexedSubscript(aIndex: Integer): MZObject;
+    method setObject(aObject: MZObject) atIndexedSubscript(aValue: Integer);
+    method toNSArray: NSArray;
+  end;
+
 implementation
 
 
@@ -48,6 +60,37 @@ end;
 method MZString.NSString: NSString;
 begin
   exit NSString.stringWithCharacters(^unichar(mono_string_chars(^MonoString(instance)))) length(mono_string_length(^MonoString(instance)));
+end;
+
+method MZArray.objectAtIndex(aIndex: Integer): MZObject;
+begin
+  var lItem := elements[aIndex];
+  var lTmp := &type.alloc();
+  exit id(lTmp).initWithMonoInstance(lItem);
+end;
+
+method MZArray.objectAtIndexedSubscript(aIndex: Integer): MZObject;
+begin
+  var lItem := elements[aIndex];
+  var lTmp := &type.alloc();
+  exit id(lTmp).initWithMonoInstance(lItem);
+end;
+
+method MZArray.setObject(aObject: MZObject) atIndexedSubscript(aValue: Integer);
+begin
+  var lInst := aObject:instance;
+  elements[aValue] := lInst;
+end;
+
+method MZArray.toNSArray: NSArray;
+begin
+  var lTmp := new NSMutableArray(count);
+  var lElements := elements;
+  for i: Integer := 0 to count -1 do begin
+    lTmp[i] := id(&type.alloc()).initWithMonoInstance(lElements[i]);
+  end;
+
+  exit lTmp;
 end;
 
 end.

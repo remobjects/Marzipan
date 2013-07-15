@@ -17,6 +17,7 @@ type
   private
     method LoadAsm(el: String): ModuleDefinition;
     method WrapObject(aVal: CGIdentifierExpression; aType: CGTypeRef): CGExpression;
+    method SigTypeToString(aType: TypeReference): String;
     fSettings: ImporterSettings;
     fLibraries: List<ModuleDefinition> := new List<ModuleDefinition>;
     fTypes: List<TypeDefinition> := new List<TypeDefinition>;
@@ -134,7 +135,7 @@ begin
         lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'instance', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'))));
       for each elpar in meth.Parameters do begin
         lMonoSig.Arguments.Add(new CGMethodArgument(Name := '_'+elpar.Name, &Type := if elpar.ParameterType.IsByReference 
-        then new CGPointerTypeRef( GetMonoType(elpar.ParameterType)) else GetMonoType(elpar.ParameterType)));
+        then new CGPointerTypeRef( GetMonoType(elpar.ParameterType.GetElementType)) else GetMonoType(elpar.ParameterType)));
       end;
       lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'exception', &Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGNamedTypeRef('MonoException')))));
       lFType.Type := new CGInlineDelegate(Signature := lMonoSig);
@@ -169,7 +170,9 @@ begin
                 &Self := new CGIdentifierExpression(ID := 'getMethodThunk', &Self := new CGIdentifierExpression(ID := 'fType'))),
             Dest := 
               new CGUnaryExpression(&Operator := CGUnaryOperator.Dereference,
-                value := new CGCastExpression(&Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGPredefinedTypeRef(CGPredefinedType.Void))), Value := new CGIdentifierExpression(ID := lFType.Name))))));
+                value := new CGCastExpression(&Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGPredefinedTypeRef(CGPredefinedType.Void))), Value := 
+                  new CGUnaryExpression(&Operator := CGUnaryOperator.AddressOf,
+                  Value := new CGIdentifierExpression(ID := lFType.Name)))))));
 
        lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'ex', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoException')), Initializer := new CGNilExpression())]));
 
@@ -291,7 +294,7 @@ begin
     lFType.Access := CGAccessModifier.Private;
     lFType.Name := 'fType';
     lFType.Type := new CGNamedTypeRef('MZType');
-    var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.FullName+', '+el.Scope.Name)));
+    var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.FullName+', '+ModuleDefinition(el.Scope).Assembly.Name.Name)));
     lCall.Self := new CGIdentifierExpression(ID := 'getType',
       &Self := new CGIdentifierExpression(ID := 'sharedInstance', 
       &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZMonoRuntime'))));
@@ -365,7 +368,8 @@ method Importer.GetMonoType(aType: TypeReference): CGTypeRef;
 begin
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer  then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
-  if aType.IsArray then exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
+  if aType.IsArray then exit new CGPointerTypeRef(new CGNamedTypeRef('MonoArray'));
+  if aType.IsArray then exit new CGPointerTypeRef(new CGNamedTypeRef('MonoArray'));
   case aType.FullName of
     'System.String': exit new CGPointerTypeRef(new CGNamedTypeRef('MonoString'));
     'System.Object': exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
@@ -388,13 +392,17 @@ begin
   //var lStr: String;
   //if fImportNameMapping.TryGetValue(lType.FullName, out lStr) then exit lStr;
   if lType.IsEnum then begin
-    fEnumTypes.Add(lType);
-    fImportNameMapping.Add(lType.FullName, lType.Name);
+    if not fEnumTypes.Contains(lType) then begin
+      fEnumTypes.Add(lType);
+      fImportNameMapping.Add(lType.FullName, lType.Name);
+    end;
     exit lType.Name;
   end;
   if lType.IsValueType then begin
-    fValueTypes.Add(lType);
-    fImportNameMapping.Add(lType.FullName, lType.Name);
+    if not fValueTypes.Contains(lType) Then begin
+      fValueTypes.Add(lType);
+      fImportNameMapping.Add(lType.FullName, lType.Name);
+    end;
     exit lType.Name;
   end;
   exit new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'));
@@ -405,7 +413,12 @@ begin
   if aType.FullName = 'System.Void' then exit nil;
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
-  if aType.IsArray then exit new CGNamedTypeRef('MZObject');
+  if aType.IsArray then begin 
+    if aType.GetElementType.IsValueType then 
+      exit new CGNamedTypeRef('MZObject')
+    else
+      exit new CGNamedTypeRef('MZArray')
+  end;
   var lRes: String;
   if self.fImportNameMapping.TryGetValue(aType.FullName, out lRes) then
     exit lRes;
@@ -459,7 +472,7 @@ end;
 
 method Importer.GetMethodSignature(aSig: MethodDefinition): String;
 begin
-  exit ':'+aSig.Name+'('+String.Join(',', aSig.Parameters.Select(a->a.ParameterType.ToString))+')';
+  exit ':'+aSig.Name+'('+String.Join(',', aSig.Parameters.Select(a->SigTypeToString(a.ParameterType)))+')';
 end;
 
 method Importer.IsObjectRef(aType: TypeReference): Boolean;
@@ -475,6 +488,38 @@ begin
   new CGIfExpression(Condition := new CGBinaryExpression(&Left := aVal, Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
     &True := new CGNilExpression(), &False := new CGNewExpression([new CGArgument(Prefix := 'withMonoInstance',value := new CGCastExpression(&Type := new CGPointerTypeRef('MonoObject'), Value := aVal))], &Type := aType));
             
+end;
+
+method Importer.SigTypeToString(aType: TypeReference): String;
+begin
+  if aType = nil then exit nil;
+  case aType.MetadataType of
+    MetadataType.Array: exit SigTypeToString(AType.GetElementType)+'[]';
+    MetadataType.Boolean: exit 'bool';
+    MetadataType.ByReference: exit SigTypeToString(AType.GetElementType)+'&';
+    MetadataType.Byte: exit 'byte';
+    MetadataType.Int16: exit 'short';
+    MetadataType.Int32: exit 'int';
+    MetadataType.Int64: exit 'long';
+    MetadataType.SByte: exit 'sbyte';
+    MetadataType.UInt16: exit 'ushort';
+    MetadataType.UInt32: exit 'uint';
+    MetadataType.UInt64: exit 'ulong';
+    MetadataType.Char: exit 'char';
+    Metadatatype.Double: exit 'double';
+    MetadataType.IntPtr: exit 'native int';
+    MetadataType.UIntPtr: exit 'native unsigned int';
+    MetadataType.Single: exit 'single';
+    MetadataType.Void: exit 'void';
+    MetadataType.Pointer: exit SigTypeToString(AType.GetElementType)+'*';
+    MetadataType.GenericInstance: exit SigTypeToString(GenericInstanceType(aType).ElementType)+'<'+String.Join(',', GenericInstanceType(aType).GenericArguments.ToArray)+'>';
+    Metadatatype.Object: exit 'object';
+    metadatatype.String: exit 'string';
+    Metadatatype.Class,
+    MEtadataType.ValueType: exit aType.ToString;
+   else
+     assert(False);
+  end;
 end;
 
 end.
