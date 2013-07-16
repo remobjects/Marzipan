@@ -128,9 +128,9 @@ begin
       var lMonoSig := new  CGMethod;
       lMonoSig.MethodKind := CGMethodKind.Method;
       if (meth.ReturnType.FullName <> 'System.Void') then
-        lMonoSig.ResultType := GetMonoType(meth.ReturnType)
-      else if meth.IsConstructor then
-        lMonoSig.ResultType := lType.Name;
+        lMonoSig.ResultType := GetMonoType(meth.ReturnType);
+      //else if meth.IsConstructor then
+      //  lMonoSig.ResultType := lType.Name;
       if meth.HasThis then
         lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'instance', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'))));
       for each elpar in meth.Parameters do begin
