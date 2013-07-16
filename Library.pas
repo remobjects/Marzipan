@@ -27,7 +27,7 @@ type
   public
     property &type: &Class := typeOf(MZObject);
     property elements: ^^MonoObject read ^^MonoObject(mono_array_addr_with_size(^MonoArray(instance), sizeOf(^MonoObject), 0));
-    property count: Integer read mono_array_length(^MonoArray(instance));
+    property count: NSUInteger read mono_array_length(^MonoArray(instance));
     method objectAtIndex(aIndex: Integer): MZObject;
     method objectAtIndexedSubscript(aIndex: Integer): MZObject;
     method setObject(aObject: MZObject) atIndexedSubscript(aValue: Integer);
