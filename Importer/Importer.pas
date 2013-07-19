@@ -266,6 +266,8 @@ begin
     for each prop in el.Properties do begin
       if not (((prop.GetMethod <> nil) and (prop.GetMethod.IsPublic)) or ((prop.SetMethod <> nil) and (prop.SetMethod.IsPublic)))then continue;
       var lProp := new CGProperty();
+      if coalesce(prop.GetMethod, prop.SetMethod).IsStatic then
+        lProp.Static := true;
       lProp.Access := CGAccessModifier.Public;
       lProp.Name := prop.Name;
       lProp.Type := GetMarzipanType(prop.PropertyType);
