@@ -279,11 +279,12 @@ begin
 
     for each prop in el.Properties do begin
       if not (((prop.GetMethod <> nil) and (prop.GetMethod.IsPublic)) or ((prop.SetMethod <> nil) and (prop.SetMethod.IsPublic)))then continue;
-      if prop.Parameters.Count > 0 then continue;
       var lProp := new CGProperty();
       if coalesce(prop.GetMethod, prop.SetMethod).IsStatic then
         lProp.Static := true;
       lProp.Access := CGAccessModifier.Public;
+      for each elz in prop.Parameters do
+        lProp.Args.Add(new CGMethodArgument(Name := elz.Name, &Type := GetMarzipanType(elz.ParameterType)));
       lProp.Name := prop.Name;
       lProp.Type := GetMarzipanType(prop.PropertyType);
       if prop.GetMethod <> nil then begin
