@@ -3,6 +3,7 @@
 interface
 
 uses
+  System.IO,
   System.Linq;
 
 type
@@ -15,21 +16,20 @@ implementation
 
 class method ConsoleApp.Main(args: array of String);
 begin
+  Console.WriteLine("RemObjects Marzipan Importer");
+  Console.WriteLine;
+  if length(args) <> 1 then begin
+    Console.WriteLine('syntax: importsettings.xml');
+  end;
   var x := new ImporterSettings;
-  x.Namespace := 'RemObjects.Oxygene.Compiler';
-  x.OutputFilename := '.\output.pas';
-  x.OutputType := OutputType.Nougat;
-  x.Types.Add(new ImportType(Name := 'RemObjects.Oxygene.Code.Compiler.CodeCompletionCompiler'));
-  x.Types.Add(new ImportType(Name := 'RemObjects.Oxygene.Code.CCListItem'));
-  x.Types.Add(new ImportType(Name := 'RemObjects.Oxygene.Model.CCListItemCollection'));
-  x.Libraries.Add('c:\projects\oxygene\bin\RemObjects.Oxygene.tools.dll');
-  x.Libraries.Add('c:\projects\oxygene\bin\RemObjects.Oxygene.dll');
-  var lWorker := new Importer(x);
+  x.LoadFromXml(args[0]);
+  Environment.CurrentDirectory := Path.GetDirectoryName(args[0]);
+var lWorker := new Importer(x);
   lWorker.Log += s->Console.WriteLine(s);
   lWorker.Run;
 
   // add your own code here
-  Console.WriteLine('Hello World.');
+//  Console.WriteLine('Hello World.');
 end;
 
 end.

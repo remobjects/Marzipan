@@ -24,7 +24,6 @@
     <GenerateMDB>True</GenerateMDB>
     <EnableAsserts>True</EnableAsserts>
     <TreatWarningsAsErrors>False</TreatWarningsAsErrors>
-    <CaptureConsoleOutput>False</CaptureConsoleOutput>
     <StartMode>Project</StartMode>
     <RegisterForComInterop>False</RegisterForComInterop>
     <CpuType>anycpu</CpuType>

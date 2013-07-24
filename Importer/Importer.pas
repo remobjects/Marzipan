@@ -496,9 +496,9 @@ method Importer.SigTypeToString(aType: TypeReference): String;
 begin
   if aType = nil then exit nil;
   case aType.MetadataType of
-    MetadataType.Array: exit SigTypeToString(AType.GetElementType)+'[]';
+    MetadataType.Array: exit SigTypeToString(aType.GetElementType)+'[]';
     MetadataType.Boolean: exit 'bool';
-    MetadataType.ByReference: exit SigTypeToString(AType.GetElementType)+'&';
+    MetadataType.ByReference: exit SigTypeToString(aType.GetElementType)+'&';
     MetadataType.Byte: exit 'byte';
     MetadataType.Int16: exit 'short';
     MetadataType.Int32: exit 'int';
@@ -513,7 +513,7 @@ begin
     MetadataType.UIntPtr: exit 'native unsigned int';
     MetadataType.Single: exit 'single';
     MetadataType.Void: exit 'void';
-    MetadataType.Pointer: exit SigTypeToString(AType.GetElementType)+'*';
+    MetadataType.Pointer: exit SigTypeToString(aType.GetElementType)+'*';
     MetadataType.GenericInstance: exit SigTypeToString(GenericInstanceType(aType).ElementType)+'<'+String.Join(',', GenericInstanceType(aType).GenericArguments.ToArray)+'>';
     Metadatatype.Object: exit 'object';
     metadatatype.String: exit 'string';
