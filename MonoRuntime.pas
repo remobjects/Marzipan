@@ -110,6 +110,7 @@ type
     property instance: ^MonoObject read fInstance;
     class method getTypeCode: MZTypeCode; virtual;
     class method getType: MZType; virtual;
+    method toType(aType: &Class): id;
     method &equals(aOther: MZObject): Boolean;
     method description: NSString; override;
     finalizer;
@@ -385,6 +386,12 @@ end;
 class method MZObject.getType: MZType;
 begin
   exit MZMonoRuntime.sharedInstance.getCoreType('System.Object');
+end;
+
+method MZObject.toType(aType: &Class): id;
+begin
+  if self.isKindOfClass(aType) then exit self;
+  exit aType.alloc.initWithMonoInstance(instance);
 end;
 
 constructor MZType withType(aType: ^MonoType);

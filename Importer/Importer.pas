@@ -16,6 +16,8 @@ type
   Importer = public class(IAssemblyResolver)
   private
     method LoadAsm(el: String): ModuleDefinition;
+    method IsListObjectRef(aType: TypeReference; out aArray: Boolean): Boolean;
+    method WrapListObject(aVal: CGIdentifierExpression; aType: CGTypeRef; aArray: Boolean): CGExpression;
     method WrapObject(aVal: CGIdentifierExpression; aType: CGTypeRef): CGExpression;
     method SigTypeToString(aType: TypeReference): String;
     fSettings: ImporterSettings;
@@ -111,7 +113,7 @@ begin
 
     fFile.Types.Add(lType);
     var lpt: String;
-    if not fImportNameMapping.TryGetValue(el.BaseType.FullName, out lpt) then
+    if (el.BaseType = nil) or not fImportNameMapping.TryGetValue(el.BaseType.FullName, out lpt) then
       lpt := 'MZObject';
     lTypeDef.ParentType := lpt;
     lTypeDef.TDKind := CGTypeDefKind.Class;
@@ -223,7 +225,13 @@ begin
             if lAfterCall = nil then begin
               lAfterCall := new LinkedList<CGStatement>;
             end;
-            lAfterCall.AddLast(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := lPar.Name), Source := WrapObject(new CGIdentifierExpression(ID := 'par'+i), lPar.Type)));
+            var lArr: Boolean;
+            if IsListObjectRef(lPTar, out lArr) then
+              lAfterCall.AddLast(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := lPar.Name), Source := WrapListObject(new CGIdentifierExpression(ID := 'par'+i), GetMarzipanType(
+              if lpt is GenericInstanceType then
+              GenericInstanceType(lPTar).GenericArguments[0] else lPTar.GetElementType), lArr)))
+            else 
+              lAfterCall.AddLast(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := lPar.Name), Source := WrapObject(new CGIdentifierExpression(ID := 'par'+i), lPar.Type)));
           end else begin
             lCall.Arguments.Add(new CGArgument(Value := 
               new CGCastExpression(&Type := GetMonoType(lPTar), VAlue :=new CGIfExpression(Condition := new CGBinaryExpression(&Left := new CGIdentifierExpression(ID := lPar.Name), Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
@@ -254,8 +262,14 @@ begin
         lBody.Elements.Add(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := 'fInstance'), Source := new CGIdentifierExpression(ID := 'inst')));
         lBody.Elements.Add(new CGExitStatement(Value := new CGSelfExpression));
       end;
+      var lArr: Boolean;
       if lHasResult then
-        if IsObjectRef(meth.ReturnType) then
+        if IsListObjectRef(meth.ReturnType, out lArr) then
+          lBody.Elements.Add(new CGExitStatement(Value := WrapListObject(new CGIdentifierExpression(ID := 'res'), GetMarzipanType(
+            if meth.ReturnType is GenericInstanceType then
+            GenericInstanceType(meth.ReturnType).GenericArguments[0] else 
+              meth.ReturnType.GetElementType), lArr)))
+        else if IsObjectRef(meth.ReturnType) then
           lBody.Elements.Add(new CGExitStatement(Value := WrapObject(new CGIdentifierExpression(ID := 'res'), GetMarzipanType(meth.ReturnType))))
         else
           lBody.Elements.Add(new CGExitStatement(Value := new CGIdentifierExpression(ID := 'res')));
@@ -522,6 +536,31 @@ begin
    else
      assert(False);
   end;
+end;
+
+method Importer.IsListObjectRef(aType: TypeReference; out aArray: Boolean): Boolean;
+begin
+  aArray := false;
+  if aType.IsArray then begin 
+    if not IsObjectRef(aType.GetElementType) then exit false;
+    aArray := true;
+    exit true;
+  end;
+  if aType.IsGenericInstance then 
+    if (aType.GetElementType.FullName = 'System.Collections.Generic.List`1') and IsObjectRef(GenericInstanceType(aType).GenericArguments[0]) then
+    exit true;
+  exit false;
+end;
+
+method Importer.WrapListObject(aVal: CGIdentifierExpression; aType: CGTypeRef; aArray: Boolean): CGExpression;
+begin
+  exit
+  new CGIfExpression(Condition := new CGBinaryExpression(&Left := aVal, Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
+    &True := new CGNilExpression(), 
+      &False := new CGNewExpression([new CGArgument(Prefix := 'withMonoInstance',
+      value := new CGCastExpression(&Type := new CGPointerTypeRef('MonoObject'), Value := aVal)),
+      new CGArgument(Prefix := 'elementType', value := new CGCallExpression([new CGArgument(Value := new CGTypeExpression(&Type := aType))], &self := new CGIdentifierExpression(ID := 'typeOf')))
+      ], &Type := if aArray then 'MZArray' else 'MZObjectList'));
 end;
 
 end.
