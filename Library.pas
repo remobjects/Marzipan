@@ -85,6 +85,7 @@ end;
 method MZArray.objectAtIndex(aIndex: Integer): id;
 begin
   var lItem := elements[aIndex];
+  if lItem = nil then exit nil;
   var lTmp := &type.alloc();
   exit id(lTmp).initWithMonoInstance(lItem);
 end;
@@ -92,6 +93,7 @@ end;
 method MZArray.objectAtIndexedSubscript(aIndex: Integer): id;
 begin
   var lItem := elements[aIndex];
+  if lItem = nil then exit nil;
   var lTmp := &type.alloc();
   exit id(lTmp).initWithMonoInstance(lItem);
 end;
