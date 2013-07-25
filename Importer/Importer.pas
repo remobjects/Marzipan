@@ -431,6 +431,9 @@ begin
   if aType.FullName = 'System.Void' then exit nil;
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
+  var b: Boolean;
+  if aType.IsGenericInstance and IsListObjectRef(aType, out b) then
+    exit new CGNamedTypeRef('MZObjectList');
   if aType.IsArray then begin 
     if aType.GetElementType.IsValueType then 
       exit new CGNamedTypeRef('MZObject')

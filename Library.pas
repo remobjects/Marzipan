@@ -144,6 +144,7 @@ begin
     exit;
   end;
   aInst.fArray := new MZArray withMonoInstance(^MonoObject(lItems));
+  aInst.fArray.type := aInst.type;
 end;
 
 constructor MZObjectList withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
