@@ -1,4 +1,4 @@
-﻿namespace RemObjects.Marzipan;
+namespace RemObjects.Marzipan;
 
 interface
 
@@ -79,7 +79,7 @@ end;
 
 method MZString.NSString: NSString;
 begin
-  exit NSString.stringWithCharacters(^unichar(mono_string_chars(^MonoString(instance)))) length(mono_string_length(^MonoString(instance)));
+  exit Foundation.NSString.stringWithCharacters(^unichar(mono_string_chars(^MonoString(instance)))) length(mono_string_length(^MonoString(instance)));
 end;
 
 method MZArray.objectAtIndex(aIndex: Integer): id;
