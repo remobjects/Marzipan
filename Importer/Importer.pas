@@ -217,7 +217,7 @@ begin
 
         if IsObjectRef(lPTar) then begin
           if lPar.Modifier = CGMethodArgumentModifier.Var then begin
-            lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'par'+i, &Type := GetMarzipanType(meth.ReturnType), Initializer := 
+            lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'par'+i, &Type := GetMonoType(lPTar), Initializer := 
             new CGCastExpression(&Type := GetMonoType(lPTar), VAlue :=
             new CGIfExpression(Condition := new CGBinaryExpression(&Left := new CGIdentifierExpression(ID := lPar.Name), Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
                 &True := new CGNilExpression(), &False := new CGCallExpression(&Self := new CGIdentifierExpression(ID := 'instance', &Self := new CGIdentifierExpression(ID := lPar.Name))))))]));
