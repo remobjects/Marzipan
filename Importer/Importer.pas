@@ -221,7 +221,7 @@ begin
             new CGCastExpression(&Type := GetMonoType(lPTar), VAlue :=
             new CGIfExpression(Condition := new CGBinaryExpression(&Left := new CGIdentifierExpression(ID := lPar.Name), Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
                 &True := new CGNilExpression(), &False := new CGCallExpression(&Self := new CGIdentifierExpression(ID := 'instance', &Self := new CGIdentifierExpression(ID := lPar.Name))))))]));
-            lCall.Arguments.Add(new CGArgument(Value := new CGIdentifierExpression(ID := 'par'+i)));
+            lCall.Arguments.Add(new CGArgument(Value := new CGUnaryExpression(&Operator := CGUnaryOperator.AddressOf, Value := new CGIdentifierExpression(ID := 'par'+i))));
             if lAfterCall = nil then begin
               lAfterCall := new LinkedList<CGStatement>;
             end;
