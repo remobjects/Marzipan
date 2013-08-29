@@ -5,7 +5,7 @@
         <ProjectGuid>b8a8b4bb-61d3-49b0-bafe-99016e5b3225</ProjectGuid>
         <OutputType>StaticLibrary</OutputType>
         <AssemblyName>Marzipan</AssemblyName>
-        <AllowGlobals>False</AllowGlobals>
+        <AllowGlobals>True</AllowGlobals>
         <AllowLegacyWith>False</AllowLegacyWith>
         <AllowLegacyOutParams>False</AllowLegacyOutParams>
         <AllowLegacyCreate>False</AllowLegacyCreate>
