@@ -306,7 +306,7 @@ end;
 method MZMonoRuntime._char: MZType;
 begin
   if fchar = nil then
-    fchar := new MZType withType(mono_get_char_clasS);
+    fchar := new MZType withType(mono_get_char_class);
   exit fchar;
 end;
 
@@ -356,7 +356,7 @@ method MZObject.description: NSString;
 begin
   var mcs := mono_object_to_string(fInstance, nil);
   if mcs = nil then exit nil;
-  exit nsstring.stringWithCharacters(^unichar(mono_string_chars(mcs))) length(mono_string_length(mcs)) ;
+  exit NSString.stringWithCharacters(^unichar(mono_string_chars(mcs))) length(mono_string_length(mcs)) ;
 end;
 
 method MZObject.&equals(aOther: MZObject): Boolean;
@@ -373,7 +373,7 @@ begin
   var mcs := mono_object_to_string(^MonoObject(aEx), nil);
   var lMsg: NSString := 'Exception';
   if mcs <> nil then 
-    lMsg := nsstring.stringWithCharacters(^unichar(mono_string_chars(mcs))) length(mono_string_length(mcs));
+    lMsg := NSString.stringWithCharacters(^unichar(mono_string_chars(mcs))) length(mono_string_length(mcs));
   
   raise new MZException withName('Exception') reason(lMsg) userInfo(nil);
 end;
