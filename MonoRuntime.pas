@@ -185,7 +185,7 @@ begin
     result := fAssemblies.objectForKey(aPath);
     if assigned(result) then exit;
     var lasm := mono_domain_assembly_open (fDomain, aPath);
-    if lasm = nil then raise new MZException('CouldNotLoadAssembly') reason('Could not load assembly') userinfo(nil);
+    if lasm = nil then raise new MZException('CouldNotLoadAssembly') reason(NSString.stringWithFormat('Could not load assembly "%@".', aPath)) userinfo(nil);
     result := new MZMonoAssembly &assembly(lasm);
     fAssemblies.setObject(result) forKey(aPath);
     if fAssemblies.count = 1 then
@@ -201,13 +201,13 @@ begin
     result := fTypes.objectForKey(aFullName);
     if result <> nil then exit;
     var ltmp := mono_reflection_type_from_name(aFullName, nil);
-    if ltmp = nil then raise new MZException('UnknownType') reason('Could not find type') userinfo(nil);
+    if ltmp = nil then raise new MZException('UnknownType') reason(NSString.stringWithFormat('Could not find type "%@".', aFullname)) userinfo(nil);
     result := new MZType withType(ltmp);
     fTypes.setObject(result) forKey(aFullName); 
   end;
 end;
 
-method MZMonoRuntime.getCoreType(aType: NSString; aAssembly: NSString): MZType;
+method MZMonoRuntime.getCoreType(aType: NSString; aAssembly: NSString := 'mscorlib'): MZType;
 begin
   exit getType(NSString.stringWithFormat('%@, %@, Version=%@, Culture=neutral, PublicKeyToken=b77a5c561934e089', aType, aAssembly, fVersion));
 end;
