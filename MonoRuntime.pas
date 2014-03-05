@@ -404,7 +404,7 @@ begin
   var lSec := mono_method_desc_new(aSig.UTF8String, 1);
   result := mono_method_desc_search_in_class(lSec, mono_class_from_mono_type(fType));
   mono_method_desc_free(lSec);
-  if result = nil then raise new NSException withName('UnknownMethod') reason ('Unknown Method') userInfo(nil);
+  if result = nil then raise new NSException withName('UnknownMethod') reason (NSString.stringWithFormat('Unknown Method "%@".', aSig)) userInfo(nil);
 end;
 
 method MZType.getMethodThunk(aSig: NSString): ^Void;
