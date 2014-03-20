@@ -55,7 +55,7 @@ begin
   end;
   var lLibs := aDoc.Root.Elements('libraries');
   if lLibs = nil then raise new Exception('"Libraries" node missing');
-  Libraries.AddRange(lLibs.Elements('library').Select(a->a.Value));
+  Libraries.AddRange(lLibs.Elements('library').Select(a->a.Value.Replace("\", System.IO.Path.DirectorySeparatorChar)));
   var lTypes := aDoc.Root.Elements('types');
   if lTypes = nil then raise new Exception('"Types" node missing');
   for each el in lTypes.Elements('type') do begin
