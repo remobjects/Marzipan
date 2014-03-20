@@ -416,7 +416,7 @@ begin
     end;
     exit lType.Name;
   end;
-  if lType.IsValueType then begin
+  if lType.IsValueType and not (lType.IsGenericInstance) and (lType.GenericParameters.Count = 0) then begin
     if not fValueTypes.Contains(lType) Then begin
       fValueTypes.Add(lType);
       fImportNameMapping.Add(lType.FullName, lType.Name);
@@ -487,6 +487,7 @@ begin
   fPaths.Add(Path.GetDirectoryName(el));
   var md := ModuleDefinition.ReadModule(el, rp);
   fLibraries.Add(md);
+  if fLoaded.TryGetValue(md.Assembly.Name.ToString, out result) then exit;
   fLoaded.Add(md.Assembly.Name.ToString, md);
   exit md;
 end;
@@ -527,17 +528,17 @@ begin
     MetadataType.UInt32: exit 'uint';
     MetadataType.UInt64: exit 'ulong';
     MetadataType.Char: exit 'char';
-    Metadatatype.Double: exit 'double';
+    MetadataType.Double: exit 'double';
     MetadataType.IntPtr: exit 'native int';
     MetadataType.UIntPtr: exit 'native unsigned int';
     MetadataType.Single: exit 'single';
     MetadataType.Void: exit 'void';
     MetadataType.Pointer: exit SigTypeToString(aType.GetElementType)+'*';
     MetadataType.GenericInstance: exit SigTypeToString(GenericInstanceType(aType).ElementType)+'<'+String.Join(',', GenericInstanceType(aType).GenericArguments.ToArray)+'>';
-    Metadatatype.Object: exit 'object';
-    metadatatype.String: exit 'string';
-    Metadatatype.Class,
-    MEtadataType.ValueType: exit aType.ToString;
+    MetadataType.Object: exit 'object';
+    MetadataType.String: exit 'string';
+    MetadataType.Class,
+    MetadataType.ValueType: exit aType.ToString;
    else
      assert(False);
   end;
