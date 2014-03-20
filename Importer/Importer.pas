@@ -121,6 +121,7 @@ begin
     lMethodMap.Clear;
     for each meth in el.Methods index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
+      if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
       if not meth.IsPublic then continue;
       
       var lFType := new CGField;
