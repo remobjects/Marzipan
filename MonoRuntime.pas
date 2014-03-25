@@ -201,7 +201,7 @@ begin
     result := fTypes.objectForKey(aFullName);
     if result <> nil then exit;
     var ltmp := mono_reflection_type_from_name(aFullName, nil);
-    if ltmp = nil then raise new MZException('UnknownType') reason(NSString.stringWithFormat('Could not find type "%@".', aFullname)) userinfo(nil);
+    if ltmp = nil then raise new MZException('UnknownType') reason(NSString.stringWithFormat('Could not find type "%@".', aFullName)) userinfo(nil);
     result := new MZType withType(ltmp);
     fTypes.setObject(result) forKey(aFullName); 
   end;
@@ -404,7 +404,22 @@ begin
   var lSec := mono_method_desc_new(aSig.UTF8String, 1);
   result := mono_method_desc_search_in_class(lSec, mono_class_from_mono_type(fType));
   mono_method_desc_free(lSec);
-  if result = nil then raise new NSException withName('UnknownMethod') reason (NSString.stringWithFormat('Unknown Method "%@".', aSig)) userInfo(nil);
+  if result = nil then begin 
+    {$IFDEF DEBUG}
+    var cl := mono_class_from_mono_type(fType);
+    var iter: ^Void := nil;
+    var lErr := new NSMutableString withCapacity(1024);
+    loop begin
+      var m := mono_class_get_methods(cl, @iter);
+      if m = nil then break; // done
+      var mn := mono_method_full_name(m, 1);
+      lErr.appendFormat('%@'#10, String(NSString.stringWithCString(mn)));
+    end;
+    raise new NSException withName('UnknownMethod') reason (NSString.stringWithFormat('Unknown Method "%@". '#10'Possibilities:'#10'%@', aSig, lErr)) userInfo(nil);
+    {$ELSE}
+    raise new NSException withName('UnknownMethod') reason (NSString.stringWithFormat('Unknown Method "%@".', aSig)) userInfo(nil);
+    {$ENDIF}
+  end;
 end;
 
 method MZType.getMethodThunk(aSig: NSString): ^Void;
