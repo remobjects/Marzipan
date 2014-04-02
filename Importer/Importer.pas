@@ -122,6 +122,7 @@ begin
     for each meth in el.Methods index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
       if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
+      if meth.Parameters.Any(a->a.ParameterType.IsGenericInstance and a.ParameterType.IsValueType) then continue;
       if not meth.IsPublic then continue;
       
       var lFType := new CGField;
@@ -535,7 +536,7 @@ begin
     MetadataType.Single: exit 'single';
     MetadataType.Void: exit 'void';
     MetadataType.Pointer: exit SigTypeToString(aType.GetElementType)+'*';
-    MetadataType.GenericInstance: exit SigTypeToString(GenericInstanceType(aType).ElementType)+'<'+String.Join(',', GenericInstanceType(aType).GenericArguments.ToArray)+'>';
+    MetadataType.GenericInstance: exit SigTypeToString(GenericInstanceType(aType).ElementType)+'<'+String.Join(',', GenericInstanceType(aType).GenericArguments.Select(a -> SigTypeToString(a)).ToArray)+'>';
     MetadataType.Object: exit 'object';
     MetadataType.String: exit 'string';
     MetadataType.Class,

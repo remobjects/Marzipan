@@ -2,3 +2,4 @@ bin
 debug
 *.user
 *.suo
+*.fire.cache
