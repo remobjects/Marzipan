@@ -413,7 +413,7 @@ begin
       var m := mono_class_get_methods(cl, @iter);
       if m = nil then break; // done
       var mn := mono_method_full_name(m, 1);
-      lErr.appendFormat('%@'#10, String(NSString.stringWithCString(mn)));
+      lErr.appendFormat('%@'#10, String(NSString.stringWithCString(mn) encoding(NSStringEncoding.NSUTF8StringEncoding)));
     end;
     raise new NSException withName('UnknownMethod') reason (NSString.stringWithFormat('Unknown Method "%@". '#10'Possibilities:'#10'%@', aSig, lErr)) userInfo(nil);
     {$ELSE}
