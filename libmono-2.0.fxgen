@@ -1,0 +1,14 @@
+OSXSdkVersion="10.9";
+processOSXLibrary({
+  library: "libmono-2.0.1",
+  headers: ["mono/jit/*.h",
+            "mono/metadata/*.h",
+            "mono/utils/*.h"],
+  headerBlackList: ["mono/metadata/debug-mono-symfile.h",
+                    "mono/metadata/sgen-bridge.h",
+                    "mono/metadata/verify.h"],
+  includePaths: ["/Users/mh/Code/Frameworks/Mono3/include/mono-2.0"],
+  link: ["mono-2.0.1"],
+  copyLibs: ["/Users/mh/Code/Frameworks/Mono3/lib/libmono-2.0.1.dylib"],
+  explicitHeaders: true
+});
