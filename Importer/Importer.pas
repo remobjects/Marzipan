@@ -297,7 +297,7 @@ begin
         lProp.Read := new CGIdentifierExpression(ID := prop.Name);
       end;
 
-      if prop.SetMethod <> nil then begin
+      if (prop.SetMethod <> nil) and (prop.SetMethod.IsPublic) then begin
         var lMeth := lMethodMap[prop.SetMethod];
         lMeth.Access := CGAccessModifier.Private;
         // move to top
