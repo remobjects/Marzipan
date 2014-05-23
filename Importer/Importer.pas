@@ -53,7 +53,7 @@ constructor Importer(aSettings: ImporterSettings);
 begin
   fSettings := aSettings;
   fImportNameMapping.Add('System.Object', 'MZObject');
-  fImportNameMapping.Add('System.String', 'MZString');
+  fImportNameMapping.Add('System.String', 'NSString');
   fImportNameMapping.Add('System.SByte', 'int8_t');
   fImportNameMapping.Add('System.Byte', 'uint8_t');
   fImportNameMapping.Add('System.Int16', 'int16_t');
@@ -218,6 +218,26 @@ begin
         end else 
           lPar.Type := GetMarzipanType(lPTar);
 
+        if lPTar.FullName = 'System.String' then begin
+          if lPar.Modifier = CGMethodArgumentModifier.Var then begin
+            lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'par'+i, &Type := GetMonoType(lPTar), Initializer := 
+            new CGCallExpression(
+              [new CGArgument(Value := new CGIdentifierExpression(ID := lPar.Name))], 
+              &Self := new CGIdentifierExpression(ID := 'MonoStringWithNSString', &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZString')))))
+            ]));
+            lCall.Arguments.Add(new CGArgument(Value := new CGUnaryExpression(&Operator := CGUnaryOperator.AddressOf, Value := new CGIdentifierExpression(ID := 'par'+i))));
+            if lAfterCall = nil then begin
+              lAfterCall := new LinkedList<CGStatement>;
+            end;
+            lAfterCall.AddLast(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := lPar.Name), Source := WrapObject(new CGIdentifierExpression(ID := 'par'+i), lPar.Type)));
+          end else begin
+            lCall.Arguments.Add(new CGArgument(Value := 
+              new CGCallExpression(
+              [new CGArgument(Value := new CGIdentifierExpression(ID := lPar.Name))], 
+              &Self := new CGIdentifierExpression(ID := 'MonoStringWithNSString', &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZString'))))
+              ));
+          end; 
+        end else 
         if IsObjectRef(lPTar) then begin
           if lPar.Modifier = CGMethodArgumentModifier.Var then begin
             lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'par'+i, &Type := GetMonoType(lPTar), Initializer := 
@@ -432,6 +452,7 @@ end;
 method Importer.GetMarzipanType(aType: TypeReference): CGTypeRef;
 begin
   if aType.FullName = 'System.Void' then exit nil;
+  if aType.FullName = 'System.String' then exit new CGNamedTypeRef('NSString');
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
   var b: Boolean;
@@ -509,6 +530,11 @@ end;
 
 method Importer.WrapObject(aVal: CGIdentifierExpression; aType: CGTypeRef): CGExpression;
 begin
+  if CGNamedTypeRef(aType):Name = 'NSString' then begin 
+    exit 
+    new CGCallExpression([new CGArgument(Value := aVal)], &Self :=  
+      new CGIdentifierExpression(ID := 'NSStringwithMonoInstance', &Self := new CGIdentifierExpression(ID := 'MZString')));
+  end;
   exit
   new CGIfExpression(Condition := new CGBinaryExpression(&Left := aVal, Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
     &True := new CGNilExpression(), &False := new CGNewExpression([new CGArgument(Prefix := 'withMonoInstance',value := new CGCastExpression(&Type := new CGPointerTypeRef('MonoObject'), Value := aVal))], &Type := aType));
