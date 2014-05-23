@@ -85,7 +85,8 @@ begin
       fTypes.Add(lLib[0]);
     var lNewName := fSettings.Prefix+ lLib[0].Name;
     Log('Adding type '+lNewName+' from '+lLib[0].FullName);
-    fImportNameMapping.Add(lLib[0].FullName, lNewName);
+    if (not lLib[0].IsValueType) then
+      fImportNameMapping.Add(lLib[0].FullName, lNewName);
   end;
   fFile := new CGFile;
   fFile.Comment := 'Marzipan import of '#13#10+
@@ -95,7 +96,7 @@ begin
   fFile.Uses.Add('mono.utils');
   fFile.Uses.Add('mono.jit');
 
-  fFile.Name := Path.GetFileNameWithoutExtension(fSettings.OutputFilename);
+  fFile.Name := if String.IsNullOrEmpty(fSettings.Namespace) then Path.GetFileNameWithoutExtension(fSettings.OutputFilename) else fSettings.Namespace;
   var lVars := new List<CGMember>;
   var lMethods := new List<CGMember>;
   
