@@ -1,4 +1,4 @@
-namespace RemObjects.Marzipan;
+﻿namespace RemObjects.Marzipan;
 
 interface
 
@@ -106,7 +106,7 @@ end;
 
 method MZArray.toNSArray: NSArray;
 begin
-  var lTmp := new NSMutableArray(count);
+  var lTmp := new NSMutableArray withCapacity(count);
   var lElements := elements;
   for i: Integer := 0 to count -1 do begin
     lTmp[i] := id(&type.alloc()).initWithMonoInstance(lElements[i]);
