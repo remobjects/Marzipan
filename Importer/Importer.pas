@@ -91,6 +91,7 @@ begin
   fFile := new CGFile;
   fFile.Comment := 'Marzipan import of '#13#10+
     String.Join(#13#10, fLibraries.Select(a->'  '+a.Assembly.Name.ToString));
+  fFile.Uses.Add('Foundation');
   fFile.Uses.Add('RemObjects.Marzipan');
   fFile.Uses.Add('mono.metadata');
   fFile.Uses.Add('mono.utils');
