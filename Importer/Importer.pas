@@ -53,7 +53,7 @@ constructor Importer(aSettings: ImporterSettings);
 begin
   fSettings := aSettings;
   fImportNameMapping.Add('System.Object', 'MZObject');
-  fImportNameMapping.Add('System.String', 'MZString');
+  fImportNameMapping.Add('System.String', 'NSString');
   fImportNameMapping.Add('System.SByte', 'int8_t');
   fImportNameMapping.Add('System.Byte', 'uint8_t');
   fImportNameMapping.Add('System.Int16', 'int16_t');
@@ -78,24 +78,26 @@ begin
   end;
   Log('Resolving types');
   for each el in fSettings.Types do begin
-    var lLib := fLibraries.SelectMany(a -> a.Types.Where(b -> (not b.IsValueType) and (b.GenericParameters.Count = 0) and (b.FullName = el.Name))).ToArray; // Lets ignore those for a sec.
+    var lLib := fLibraries.SelectMany(a -> a.Types.Where(b -> (b.GenericParameters.Count = 0) and (b.FullName = el.Name))).ToArray; // Lets ignore those for a sec.
     if lLib.Count = 0 then
       raise new Exception('Type "'+el.Name+'" was not found')
-    else
+    else if (not lLib[0].IsValueType) then
       fTypes.Add(lLib[0]);
     var lNewName := fSettings.Prefix+ lLib[0].Name;
     Log('Adding type '+lNewName+' from '+lLib[0].FullName);
-    fImportNameMapping.Add(lLib[0].FullName, lNewName);
+    if (not lLib[0].IsValueType) then
+      fImportNameMapping.Add(lLib[0].FullName, lNewName);
   end;
   fFile := new CGFile;
   fFile.Comment := 'Marzipan import of '#13#10+
     String.Join(#13#10, fLibraries.Select(a->'  '+a.Assembly.Name.ToString));
+  fFile.Uses.Add('Foundation');
   fFile.Uses.Add('RemObjects.Marzipan');
   fFile.Uses.Add('mono.metadata');
   fFile.Uses.Add('mono.utils');
   fFile.Uses.Add('mono.jit');
 
-  fFile.Name := Path.GetFileNameWithoutExtension(fSettings.OutputFilename);
+  fFile.Name := if String.IsNullOrEmpty(fSettings.Namespace) then Path.GetFileNameWithoutExtension(fSettings.OutputFilename) else fSettings.Namespace;
   var lVars := new List<CGMember>;
   var lMethods := new List<CGMember>;
   
@@ -217,6 +219,26 @@ begin
         end else 
           lPar.Type := GetMarzipanType(lPTar);
 
+        if lPTar.FullName = 'System.String' then begin
+          if lPar.Modifier = CGMethodArgumentModifier.Var then begin
+            lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'par'+i, &Type := GetMonoType(lPTar), Initializer := 
+            new CGCallExpression(
+              [new CGArgument(Value := new CGIdentifierExpression(ID := lPar.Name))], 
+              &Self := new CGIdentifierExpression(ID := 'MonoStringWithNSString', &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZString')))))
+            ]));
+            lCall.Arguments.Add(new CGArgument(Value := new CGUnaryExpression(&Operator := CGUnaryOperator.AddressOf, Value := new CGIdentifierExpression(ID := 'par'+i))));
+            if lAfterCall = nil then begin
+              lAfterCall := new LinkedList<CGStatement>;
+            end;
+            lAfterCall.AddLast(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := lPar.Name), Source := WrapObject(new CGIdentifierExpression(ID := 'par'+i), lPar.Type)));
+          end else begin
+            lCall.Arguments.Add(new CGArgument(Value := 
+              new CGCallExpression(
+              [new CGArgument(Value := new CGIdentifierExpression(ID := lPar.Name))], 
+              &Self := new CGIdentifierExpression(ID := 'MonoStringWithNSString', &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZString'))))
+              ));
+          end; 
+        end else 
         if IsObjectRef(lPTar) then begin
           if lPar.Modifier = CGMethodArgumentModifier.Var then begin
             lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'par'+i, &Type := GetMonoType(lPTar), Initializer := 
@@ -297,7 +319,7 @@ begin
         lProp.Read := new CGIdentifierExpression(ID := prop.Name);
       end;
 
-      if prop.SetMethod <> nil then begin
+      if (prop.SetMethod <> nil) and (prop.SetMethod.IsPublic) then begin
         var lMeth := lMethodMap[prop.SetMethod];
         lMeth.Access := CGAccessModifier.Private;
         // move to top
@@ -431,6 +453,7 @@ end;
 method Importer.GetMarzipanType(aType: TypeReference): CGTypeRef;
 begin
   if aType.FullName = 'System.Void' then exit nil;
+  if aType.FullName = 'System.String' then exit new CGNamedTypeRef('NSString');
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeRef(GetMonoType(aType.GetElementType));
   var b: Boolean;
@@ -508,6 +531,11 @@ end;
 
 method Importer.WrapObject(aVal: CGIdentifierExpression; aType: CGTypeRef): CGExpression;
 begin
+  if CGNamedTypeRef(aType):Name = 'NSString' then begin 
+    exit 
+    new CGCallExpression([new CGArgument(Value := aVal)], &Self :=  
+      new CGIdentifierExpression(ID := 'NSStringwithMonoInstance', &Self := new CGIdentifierExpression(ID := 'MZString')));
+  end;
   exit
   new CGIfExpression(Condition := new CGBinaryExpression(&Left := aVal, Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
     &True := new CGNilExpression(), &False := new CGNewExpression([new CGArgument(Prefix := 'withMonoInstance',value := new CGCastExpression(&Type := new CGPointerTypeRef('MonoObject'), Value := aVal))], &Type := aType));
@@ -531,8 +559,8 @@ begin
     MetadataType.UInt64: exit 'ulong';
     MetadataType.Char: exit 'char';
     MetadataType.Double: exit 'double';
-    MetadataType.IntPtr: exit 'native int';
-    MetadataType.UIntPtr: exit 'native unsigned int';
+    MetadataType.IntPtr: exit 'intptr';
+    MetadataType.UIntPtr: exit 'uintptr';
     MetadataType.Single: exit 'single';
     MetadataType.Void: exit 'void';
     MetadataType.Pointer: exit SigTypeToString(aType.GetElementType)+'*';
