@@ -531,8 +531,8 @@ begin
     MetadataType.UInt64: exit 'ulong';
     MetadataType.Char: exit 'char';
     MetadataType.Double: exit 'double';
-    MetadataType.IntPtr: exit 'native int';
-    MetadataType.UIntPtr: exit 'native unsigned int';
+    MetadataType.IntPtr: exit 'intptr';
+    MetadataType.UIntPtr: exit 'uintptr';
     MetadataType.Single: exit 'single';
     MetadataType.Void: exit 'void';
     MetadataType.Pointer: exit SigTypeToString(aType.GetElementType)+'*';
