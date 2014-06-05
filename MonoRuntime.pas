@@ -37,6 +37,7 @@ type
     fAssemblies: NSMutableDictionary := new NSMutableDictionary;
     fAssemblyNames: NSMutableDictionary := new NSMutableDictionary;
     class var fInstance: MZMonoRuntime;
+    method setupDebugger();
   public
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString);
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String);
@@ -136,6 +137,7 @@ begin
   fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
   mono_config_parse(nil);
   mono_thread_set_main (mono_thread_current ());
+  setupDebugger();
 end;
 
 constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
@@ -150,8 +152,19 @@ begin
     mono_set_dirs(aLibPath.UTF8String, aETCPath.UTF8String);
   end;
   
+  setupDebugger();
   fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
   mono_config_parse(nil);
+end;
+
+method MZMonoRuntime.setupDebugger();
+begin
+  var debug := getenv("MARZIPAN_MONO_DEBUG");
+  if debug ≠ nil then begin
+    NSLog("Entering debug mode with options %s"#10, debug);
+    mono_debug_init(MonoDebugFormat.MONO_DEBUG_FORMAT_MONO);
+    mono_jit_parse_options(1, @debug);
+  end;
 end;
 
 class method MZMonoRuntime.get_sharedInstance: MZMonoRuntime;
