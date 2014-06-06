@@ -49,6 +49,8 @@ type
     method loadAssembly(aPath: NSString): MZMonoAssembly; 
     method getType(aFullName: NSString): MZType;
     method getCoreType(aType: NSString; aAssembly: NSString := 'mscorlib'): MZType;
+    
+    method attachToThread;
 
     property byte: MZType read byte;
     property sbyte: MZType read sbyte;
@@ -186,7 +188,6 @@ begin
   exit fString;
 end;
 
-
 finalizer MZMonoRuntime;
 begin
   mono_jit_cleanup(fDomain);
@@ -206,6 +207,11 @@ begin
 
     fAssemblyNames.setObject(result) forKey(result.assemblyName);
   end;
+end;
+
+method MZMonoRuntime.attachToThread;
+begin
+  mono_thread_attach(fDomain);
 end;
 
 method MZMonoRuntime.getType(aFullName: NSString): MZType;
