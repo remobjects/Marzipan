@@ -37,7 +37,8 @@ type
     fAssemblies: NSMutableDictionary := new NSMutableDictionary;
     fAssemblyNames: NSMutableDictionary := new NSMutableDictionary;
     class var fInstance: MZMonoRuntime;
-    method setupDebugger();
+    method setupDebugger;
+    method runMain;
   public
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString);
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String);
@@ -49,6 +50,8 @@ type
     method loadAssembly(aPath: NSString): MZMonoAssembly; 
     method getType(aFullName: NSString): MZType;
     method getCoreType(aType: NSString; aAssembly: NSString := 'mscorlib'): MZType;
+    
+    method attachToThread;
 
     property byte: MZType read byte;
     property sbyte: MZType read sbyte;
@@ -134,10 +137,12 @@ begin
   else
     fVersion := aVersion;
   fInstance := self;
+
+  setupDebugger();
   fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
   mono_config_parse(nil);
   mono_thread_set_main (mono_thread_current ());
-  setupDebugger();
+  runMain();
 end;
 
 constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
@@ -155,9 +160,10 @@ begin
   setupDebugger();
   fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
   mono_config_parse(nil);
+  runMain();
 end;
 
-method MZMonoRuntime.setupDebugger();
+method MZMonoRuntime.setupDebugger;
 begin
   var debug := getenv("MARZIPAN_MONO_DEBUG");
   if debug ≠ nil then begin
@@ -186,7 +192,6 @@ begin
   exit fString;
 end;
 
-
 finalizer MZMonoRuntime;
 begin
   mono_jit_cleanup(fDomain);
@@ -206,6 +211,21 @@ begin
 
     fAssemblyNames.setObject(result) forKey(result.assemblyName);
   end;
+end;
+
+method MZMonoRuntime.runMain;
+begin
+  // This is a no-op method that happens to match the criteria needed for the Mono entry point
+  var lTmp: ^MonoMethod := getType("System.Threading.Thread, mscorlib").getMethod(":MemoryBarrier");
+  var lPath := new ^AnsiChar[2];
+  lPath[0] := "";
+  lPath[1] := nil;
+  mono_runtime_run_main(lTmp, 1, lPath, nil);
+end;
+
+method MZMonoRuntime.attachToThread;
+begin
+  mono_thread_attach(fDomain);
 end;
 
 method MZMonoRuntime.getType(aFullName: NSString): MZType;
