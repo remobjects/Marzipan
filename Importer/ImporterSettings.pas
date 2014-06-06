@@ -4,6 +4,7 @@ interface
 
 uses
   System.Collections.Generic,
+  System.IO,
   System.Text,
   System.Linq,
   System.Xml.Linq;
@@ -46,7 +47,7 @@ begin
   &Namespace := aDoc.Root.Element('namespace'):Value;
   if aDoc.Root.Element('outputtype'):Value:ToLowerInvariant = 'objc' then
     OutputType := OutputType.ObjC;
-  OutputFilename := aDoc.Root.Element('outputfilename'):Value;
+  OutputFilename := aDoc.Root.Element('outputfilename'):Value:Replace("\", Path.DirectorySeparatorChar);
   Prefix := aDoc.Root.Element('prefix'):Value;
   case OutputType of
     OutputType.ObjC: if OutputFilename = nil then OutputFilename := 'default.h';

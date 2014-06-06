@@ -90,7 +90,7 @@ begin
   end;
   fFile := new CGFile;
   fFile.Comment := 'Marzipan import of '#13#10+
-    String.Join(#13#10, fLibraries.Select(a->'  '+a.Assembly.Name.ToString));
+    String.Join(#13#10, fLibraries.Select(a->'  '+a.Assembly.Name.ToString).ToArray);
   fFile.Uses.Add('Foundation');
   fFile.Uses.Add('RemObjects.Marzipan');
   fFile.Uses.Add('mono.metadata');
@@ -519,7 +519,7 @@ end;
 
 method Importer.GetMethodSignature(aSig: MethodDefinition): String;
 begin
-  exit ':'+aSig.Name+'('+String.Join(',', aSig.Parameters.Select(a->SigTypeToString(a.ParameterType)))+')';
+  exit ':'+aSig.Name+'('+String.Join(',', aSig.Parameters.Select(a->SigTypeToString(a.ParameterType)).ToArray)+')';
 end;
 
 method Importer.IsObjectRef(aType: TypeReference): Boolean;
@@ -534,7 +534,7 @@ begin
   if CGNamedTypeRef(aType):Name = 'NSString' then begin 
     exit 
     new CGCallExpression([new CGArgument(Value := aVal)], &Self :=  
-      new CGIdentifierExpression(ID := 'NSStringwithMonoInstance', &Self := new CGIdentifierExpression(ID := 'MZString')));
+      new CGIdentifierExpression(ID := 'NSStringWithMonoString', &Self := new CGIdentifierExpression(ID := 'MZString')));
   end;
   exit
   new CGIfExpression(Condition := new CGBinaryExpression(&Left := aVal, Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
