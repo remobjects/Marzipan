@@ -1,29 +1,30 @@
-﻿
+
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2012
-Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "RemObjects.Marzipan", "RemObjects.Marzipan.oxygene", "{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}"
-EndProject
+# RemObjects Fire
 Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "Importer", "Importer\Importer.oxygene", "{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}"
 EndProject
 Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "RemObjects.CodeGenerator", "RemObjects.CodeGenerator\RemObjects.CodeGenerator.oxygene", "{E1EC7063-1B75-4472-8BFB-18F6ED93380B}"
 EndProject
+Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "RemObjects.Marzipan", "RemObjects.Marzipan.oxygene", "{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
-		Debug|Mixed Platforms = Debug|Mixed Platforms
-		Release|Mixed Platforms = Release|Mixed Platforms
+		Debug|AnyCPU = Debug|AnyCPU
+		Release|AnyCPU = Release|AnyCPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Debug|Mixed Platforms.ActiveCfg = Debug
-		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|Mixed Platforms.ActiveCfg = Release
-		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|Mixed Platforms.Build.0 = Release
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Debug|Mixed Platforms.ActiveCfg = Debug
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Debug|Mixed Platforms.Build.0 = Debug
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Release|Mixed Platforms.ActiveCfg = Release
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Release|Mixed Platforms.Build.0 = Release
-		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Debug|Mixed Platforms.ActiveCfg = Debug
-		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Debug|Mixed Platforms.Build.0 = Debug
-		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Release|Mixed Platforms.ActiveCfg = Release
-		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Release|Mixed Platforms.Build.0 = Release
+		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{E1EC7063-1B75-4472-8BFB-18F6ED93380B}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|AnyCPU.Build.0 = Release|AnyCPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

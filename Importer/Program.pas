@@ -20,16 +20,16 @@ begin
   Console.WriteLine;
   if length(args) <> 1 then begin
     Console.WriteLine('syntax: importsettings.xml');
+    exit;
   end;
+  
   var x := new ImporterSettings;
   x.LoadFromXml(args[0]);
   Environment.CurrentDirectory := Path.GetDirectoryName(args[0]);
-var lWorker := new Importer(x);
+
+  var lWorker := new Importer(x);
   lWorker.Log += s->Console.WriteLine(s);
   lWorker.Run;
-
-  // add your own code here
-//  Console.WriteLine('Hello World.');
 end;
 
 end.
