@@ -371,6 +371,9 @@ end;
 
 constructor MZObject withMonoInstance(aInstance: ^MonoObject);
 begin
+  if not assigned(aInstance) then
+    exit nil;
+    
   fHandle := mono_gchandle_new(aInstance, 1);
   fInstance := aInstance;
 end;
