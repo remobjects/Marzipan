@@ -22,7 +22,7 @@ type
     method SigTypeToString(aType: TypeReference): String;
     fSettings: ImporterSettings;
     fLibraries: List<ModuleDefinition> := new List<ModuleDefinition>;
-    fTypes: List<TypeDefinition> := new List<TypeDefinition>;
+    fTypes: Dictionary<TypeDefinition, String> := new Dictionary<TypeDefinition, String>;
     fImportNameMapping: Dictionary<String, String> := new Dictionary<String,String>;
     fEnumTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
     fValueTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
@@ -79,11 +79,11 @@ begin
   Log('Resolving types');
   for each el in fSettings.Types do begin
     var lLib := fLibraries.SelectMany(a -> a.Types.Where(b -> (b.GenericParameters.Count = 0) and (b.FullName = el.Name))).ToArray; // Lets ignore those for a sec.
+    var lNewName := if not String.IsNullOrEmpty(el.TargetName) then el.TargetName else fSettings.Prefix+ lLib[0].Name;
     if lLib.Count = 0 then
       raise new Exception('Type "'+el.Name+'" was not found')
     else if (not lLib[0].IsValueType) then
-      fTypes.Add(lLib[0]);
-    var lNewName := fSettings.Prefix+ lLib[0].Name;
+      fTypes.Add(lLib[0], lNewName);
     Log('Adding type '+lNewName+' from '+lLib[0].FullName);
     if (not lLib[0].IsValueType) then
       fImportNameMapping.Add(lLib[0].FullName, lNewName);
@@ -104,24 +104,24 @@ begin
   var lNames: HashSet<String> := new HashSet<String>;
   var lMethodMap: Dictionary<MethodDefinition, CGMethod> := new Dictionary<MethodDefinition,CGMethod>;
   for each el in fTypes do begin
-    Log('Generating type '+el.FullName);
+    Log('Generating type '+el.Key.FullName);
     lMethodMap.Clear;
 
     var lType := new CGNamedType();
-    lType.Name := el.Name;
-    lType.Comment := 'Import of '+el.FullName+' from '+el.Scope.Name;
+    lType.Name := coalesce(el.Value, el.Key.Name);
+    lType.Comment := 'Import of '+el.Key.FullName+' from '+el.Key.Scope.Name;
     var lTypeDef := new CGTypeDefinition();
     lType.Type := lTypeDef;
 
     fFile.Types.Add(lType);
     var lpt: String;
-    if (el.BaseType = nil) or not fImportNameMapping.TryGetValue(el.BaseType.FullName, out lpt) then
+    if (el.Key.BaseType = nil) or not fImportNameMapping.TryGetValue(el.Key.BaseType.FullName, out lpt) then
       lpt := 'MZObject';
     lTypeDef.ParentType := lpt;
     lTypeDef.TDKind := CGTypeDefKind.Class;
     lNames.Clear;
     lMethodMap.Clear;
-    for each meth in el.Methods index n do begin
+    for each meth in el.Key.Methods index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
       if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
       if meth.Parameters.Any(a->a.ParameterType.IsGenericInstance and a.ParameterType.IsValueType) then continue;
@@ -301,7 +301,7 @@ begin
 
     var lProperties := new List<CGProperty>;
 
-    for each prop in el.Properties do begin
+    for each prop in el.Key.Properties do begin
       if not (((prop.GetMethod <> nil) and (prop.GetMethod.IsPublic)) or ((prop.SetMethod <> nil) and (prop.SetMethod.IsPublic)))then continue;
       var lProp := new CGProperty();
       if coalesce(prop.GetMethod, prop.SetMethod).IsStatic then
@@ -336,7 +336,7 @@ begin
     lFType.Access := CGAccessModifier.Private;
     lFType.Name := 'fType';
     lFType.Type := new CGNamedTypeRef('MZType');
-    var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.FullName+', '+ModuleDefinition(el.Scope).Assembly.Name.Name)));
+    var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.Key.FullName+', '+ModuleDefinition(el.Key.Scope).Assembly.Name.Name)));
     lCall.Self := new CGIdentifierExpression(ID := 'getType',
       &Self := new CGIdentifierExpression(ID := 'sharedInstance', 
       &Self := new CGTypeExpression(&Type := new CGNamedTypeRef('MZMonoRuntime'))));

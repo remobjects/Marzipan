@@ -32,6 +32,7 @@ type
   private
   public
     property Name: String; 
+    property TargetName: String;
   end;
 
 implementation
@@ -60,7 +61,7 @@ begin
   var lTypes := aDoc.Root.Elements('types');
   if lTypes = nil then raise new Exception('"Types" node missing');
   for each el in lTypes.Elements('type') do begin
-    Types.Add(new ImportType(Name := el.Element('name'):Value));
+    Types.Add(new ImportType(Name := el.Element('name'):Value, TargetName := el.Element('targetname'):Value));
   end;
 end;
 
