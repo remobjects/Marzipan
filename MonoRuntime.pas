@@ -111,7 +111,7 @@ type
     class method raiseException(aEx: ^MonoException);
     constructor withMonoInstance(aInstance: ^MonoObject);
     method getType: ^MonoType;
-    property instance: ^MonoObject read fInstance;
+    property __instance: ^MonoObject read fInstance;
     class method getTypeCode: MZTypeCode; virtual;
     class method getType: MZType; virtual;
     method toType(aType: &Class): id;
@@ -401,7 +401,7 @@ begin
     fEquals := MZMonoRuntime.sharedInstance.object.getMethodThunk('System.Object:Equals(System.Object)');
   var lEquals: __system_object_equals_method;
   ^^Void(@lEquals)^ := fEquals;
-  exit lEquals(if aOther = nil then nil else aOther.instance);
+  exit lEquals(if aOther = nil then nil else aOther.__instance);
 end;
 
 class method MZObject.raiseException(aEx: ^MonoException);
@@ -427,7 +427,7 @@ end;
 method MZObject.toType(aType: &Class): id;
 begin
   if self.isKindOfClass(aType) then exit self;
-  exit aType.alloc.initWithMonoInstance(instance);
+  exit aType.alloc.initWithMonoInstance(__instance);
 end;
 
 constructor MZType withType(aType: ^MonoType);

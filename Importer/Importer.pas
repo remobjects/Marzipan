@@ -138,7 +138,7 @@ begin
       //else if meth.IsConstructor then
       //  lMonoSig.ResultType := lType.Name;
       if meth.HasThis then
-        lMonoSig.Arguments.Add(new CGMethodArgument(Name := 'instance', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'))));
+        lMonoSig.Arguments.Add(new CGMethodArgument(Name := '__instance', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject'))));
       for each elpar in meth.Parameters do begin
         lMonoSig.Arguments.Add(new CGMethodArgument(Name := '_'+elpar.Name, &Type := if elpar.ParameterType.IsByReference 
         then new CGPointerTypeRef( GetMonoType(elpar.ParameterType.GetElementType)) else GetMonoType(elpar.ParameterType)));
@@ -195,14 +195,14 @@ begin
 
           lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'inst', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject')), Initializer := new CGCallExpression(&Self := new CGIdentifierExpression(&Self :=new  CGIdentifierExpression(ID := 'fType'), ID := 'instantiate')))]))
         end else
-          lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'inst', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject')), Initializer := new CGIdentifierExpression(ID := 'instance'))]));
+          lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'inst', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject')), Initializer := new CGIdentifierExpression(ID := '__instance'))]));
         lCall.Arguments.Add(new CGArgument(Value := new CGIdentifierExpression(ID := 'inst')));
       end;
 
 
        
 (*            
-  result := fLength(instance, @ex);
+  result := fLength(__instance, @ex);
   if ex <> nil then raiseException(ex);
 *)
 
@@ -244,7 +244,7 @@ begin
             lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'par'+i, &Type := GetMonoType(lPTar), Initializer := 
             new CGCastExpression(&Type := GetMonoType(lPTar), VAlue :=
             new CGIfExpression(Condition := new CGBinaryExpression(&Left := new CGIdentifierExpression(ID := lPar.Name), Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
-                &True := new CGNilExpression(), &False := new CGCallExpression(&Self := new CGIdentifierExpression(ID := 'instance', &Self := new CGIdentifierExpression(ID := lPar.Name))))))]));
+                &True := new CGNilExpression(), &False := new CGCallExpression(&Self := new CGIdentifierExpression(ID := '__instance', &Self := new CGIdentifierExpression(ID := lPar.Name))))))]));
             lCall.Arguments.Add(new CGArgument(Value := new CGUnaryExpression(&Operator := CGUnaryOperator.AddressOf, Value := new CGIdentifierExpression(ID := 'par'+i))));
             if lAfterCall = nil then begin
               lAfterCall := new LinkedList<CGStatement>;
@@ -259,7 +259,7 @@ begin
           end else begin
             lCall.Arguments.Add(new CGArgument(Value := 
               new CGCastExpression(&Type := GetMonoType(lPTar), VAlue :=new CGIfExpression(Condition := new CGBinaryExpression(&Left := new CGIdentifierExpression(ID := lPar.Name), Right := new CGNilExpression(), &Operator := CGBinaryOperator.Equals),
-                &True := new CGNilExpression(), &False := new CGCallExpression(&Self := new CGIdentifierExpression(ID := 'instance', &Self := new CGIdentifierExpression(ID := lPar.Name)))))));
+                &True := new CGNilExpression(), &False := new CGCallExpression(&Self := new CGIdentifierExpression(ID := '__instance', &Self := new CGIdentifierExpression(ID := lPar.Name)))))));
           end;
             //lCall.Arguments.Add(new CGArgument(
         end else begin
