@@ -122,7 +122,7 @@ type
 
 implementation
 
-type __system_object_equals_method = method(o: ^MonoObject): Boolean;
+type MZSystemObjectEqualsMethod = method(o: ^MonoObject): Boolean;
 
 constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString);
 begin
@@ -399,7 +399,7 @@ method MZObject.&equals(aOther: MZObject): Boolean;
 begin
   if fEquals = nil then
     fEquals := MZMonoRuntime.sharedInstance.object.getMethodThunk('System.Object:Equals(System.Object)');
-  var lEquals: __system_object_equals_method;
+  var lEquals: MZSystemObjectEqualsMethod;
   ^^Void(@lEquals)^ := fEquals;
   exit lEquals(if aOther = nil then nil else aOther.__instance);
 end;

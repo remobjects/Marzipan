@@ -35,7 +35,7 @@ type
     method objectAtIndexedSubscript(aIndex: Integer): id;
     method setObject(aObject: NSObject) atIndexedSubscript(aValue: Integer);
     method countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
-    method toNSArray: NSArray;
+    method NSArray: NSArray;
   end;
 
   MZObjectList = public class(MZObject, INSFastEnumeration)
@@ -56,6 +56,7 @@ type
     method objectAtIndex(aIndex: Integer): id;
     method objectAtIndexedSubscript(aIndex: Integer): id;
     method countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
+    method NSArray: NSArray;
   end;
   
   RemObjects.Marzipan.Generic.MZObjectList<T> = public class(INSFastEnumeration<T>) mapped to MZObjectList
@@ -157,7 +158,7 @@ begin
   end;
 end;
 
-method MZArray.toNSArray: NSArray;
+method MZArray.NSArray: NSArray;
 begin
   var lTmp := new NSMutableArray withCapacity(count);
   var lElements := elements;
@@ -256,6 +257,8 @@ end;
 
 method MZObjectList.countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
 begin
+  if fItems = nil then MZObjectListInitFields(self); // global methods optimize better.
+  if (fItems^ <> fLastItems) or (fArray = nil) then MZObjectListLoadArray(self);
   result := fArray.countByEnumeratingWithState(state) objects(buffer) count(len);
 end;
 
@@ -265,5 +268,15 @@ begin
   exit fSize^;
 end;
 
+method MZObjectList.NSArray: NSArray;
+begin
+  if fItems = nil then MZObjectListInitFields(self);
+  if (fArray = nil) then MZObjectListLoadArray(self);
+  var lTmp := new NSMutableArray withCapacity(count);
+  for i: Integer := 0 to count-1 do
+    lTmp[i] := fArray[i];
+  exit lTmp;
+end;
+
 end.
-    
+
