@@ -110,8 +110,7 @@ end;
 class method MZString.MonoStringWithNSString(s: NSString): ^MonoString;
 begin
   if s = nil then exit nil;
-
-  exit mono_string_from_utf16(^mono_unichar2(s.cStringUsingEncoding(NSStringEncoding.NSUnicodeStringEncoding)));
+  exit mono_string_new_wrapper(s.cStringUsingEncoding(NSStringEncoding.NSUTF8StringEncoding));
 end;
 
 class method NSString_Marzipan_Helpers.stringwithMonoString(s: ^MonoString): NSString;
@@ -279,4 +278,3 @@ begin
 end;
 
 end.
-
