@@ -64,7 +64,7 @@ begin
   fImportNameMapping.Add('System.UInt64', 'uint64_t');
   fImportNameMapping.Add('System.IntPtr', 'intptr_t');
   fImportNameMapping.Add('System.UIntPtr', 'uintptr_t');
-  fImportNameMapping.Add('System.Char', 'uint16_t');
+  fImportNameMapping.Add('System.Char', 'Char');
   fImportNameMapping.Add('System.Single', 'float');
   fImportNameMapping.Add('System.Double', 'double');
   fImportNameMapping.Add('System.Boolean', 'Boolean');
