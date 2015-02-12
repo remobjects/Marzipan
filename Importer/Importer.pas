@@ -286,7 +286,7 @@ begin
         new CGIfStatement(Condition := new CGBinaryExpression(Left := new CGIdentifierExpression(ID := 'ex'), Right := new CGNilExpression(), &Operator := CGBinaryOperator.NotEquals),
         &True := new CGAssignmentStatement(Source := new CGCallExpression([new CGArgument(Value := new CGIdentifierExpression(ID := 'ex'))], &Self := new CGIdentifierExpression(ID := 'raiseException')))));
       if meth.IsConstructor then begin
-        lBody.Elements.Add(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := 'Instance'), Source := new CGIdentifierExpression(ID := 'inst')));
+        lBody.Elements.Add(new CGAssignmentStatement(Dest := new CGIdentifierExpression(ID := '__instance'), Source := new CGIdentifierExpression(ID := 'inst')));
         lBody.Elements.Add(new CGExitStatement(Value := new CGSelfExpression));
       end;
       var lArr: Boolean;
