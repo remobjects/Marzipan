@@ -79,6 +79,9 @@ begin
   Log('Resolving types');
   for each el in fSettings.Types do begin
     var lLib := fLibraries.SelectMany(a -> a.Types.Where(b -> (b.GenericParameters.Count = 0) and (b.FullName = el.Name))).ToArray; // Lets ignore those for a sec.
+    if lLib.Count = 0 then
+      raise new Exception('Type "'+el.Name+'" not found.');
+    
     var lNewName := if not String.IsNullOrEmpty(el.TargetName) then el.TargetName else fSettings.Prefix+ lLib[0].Name;
     if lLib.Count = 0 then
       raise new Exception('Type "'+el.Name+'" was not found')
@@ -403,6 +406,11 @@ begin
   end;
   lGenerator.Build(fFile);
   Output := lGenerator.Output.ToString;
+  
+  //Console.WriteLine(Path.GetExtension(fSettings.OutputFilename));
+  if Path.GetExtension(fSettings.OutputFilename) = '.pas' then
+    Output := '{$HIDE W8}'#13#10#13#10+Output;
+  
   File.WriteAllText(fSettings.OutputFilename, Output);
 end;
 
