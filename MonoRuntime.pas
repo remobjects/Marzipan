@@ -107,11 +107,12 @@ type
     fInstance: ^MonoObject;
     fHandle: Int32;
     class var fEquals: ^Void;
+    method setInstance(aInstance: ^MonoObject);
   public
     class method raiseException(aEx: ^MonoException);
     constructor withMonoInstance(aInstance: ^MonoObject);
     method getType: ^MonoType;
-    property __instance: ^MonoObject read fInstance;
+    property __instance: ^MonoObject read fInstance write setInstance;
     class method getTypeCode: MZTypeCode; virtual;
     class method getType: MZType; virtual;
     method toType(aType: &Class): id;
@@ -373,9 +374,7 @@ constructor MZObject withMonoInstance(aInstance: ^MonoObject);
 begin
   if not assigned(aInstance) then
     exit nil;
-    
-  fHandle := mono_gchandle_new(aInstance, 1);
-  fInstance := aInstance;
+  setInstance(aInstance);
 end;
 
 finalizer MZObject;
@@ -428,6 +427,14 @@ method MZObject.toType(aType: &Class): id;
 begin
   if self.isKindOfClass(aType) then exit self;
   exit aType.alloc.initWithMonoInstance(__instance);
+end;
+
+method MZObject.setInstance(aInstance: ^MonoObject);
+begin
+  if fInstance <> nil then
+    mono_gchandle_free(fHandle);
+  fHandle := mono_gchandle_new(aInstance, 1);
+  fInstance := aInstance;
 end;
 
 constructor MZType withType(aType: ^MonoType);
