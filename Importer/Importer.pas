@@ -334,11 +334,13 @@ begin
     end;
 
 
-    var lFType := new CGField;
+    var lFType := new CGProperty;
     lFType.Static := true;
     lFType.Access := CGAccessModifier.Private;
     lFType.Name := 'fType';
+    lFType.Attributes.Add(new CGAttribute(&Type := new CGNamedTypeRef('Lazy')));
     lFType.Type := new CGNamedTypeRef('MZType');
+    
     var lCall := new CGCallExpression(new CGArgument(Value := new CGStringExpression(Value := el.Key.FullName+', '+ModuleDefinition(el.Key.Scope).Assembly.Name.Name)));
     lCall.Self := new CGIdentifierExpression(ID := 'getType',
       &Self := new CGIdentifierExpression(ID := 'sharedInstance', 
