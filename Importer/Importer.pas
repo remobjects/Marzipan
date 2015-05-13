@@ -110,6 +110,8 @@ begin
     Log('Generating type '+el.Key.FullName);
     lMethodMap.Clear;
 
+    var lFTypePropertyName := 'fType_'+el.Key.FullName.Replace(".", "_");
+
     var lType := new CGNamedType();
     lType.Name := coalesce(el.Value, el.Key.Name);
     lType.Comment := 'Import of '+el.Key.FullName+' from '+el.Key.Scope.Name;
@@ -176,7 +178,7 @@ begin
           &True := new CGAssignmentStatement(
             Source := 
               new CGCallExpression([new CGArgument(Value := new CGStringExpression(Value := GetMethodSignature(meth)))], 
-                &Self := new CGIdentifierExpression(ID := 'getMethodThunk', &Self := new CGIdentifierExpression(ID := 'fType'))),
+                &Self := new CGIdentifierExpression(ID := 'getMethodThunk', &Self := new CGIdentifierExpression(ID := lFTypePropertyName))),
             Dest := 
               new CGUnaryExpression(&Operator := CGUnaryOperator.Dereference,
                 value := new CGCastExpression(&Type := new CGPointerTypeRef(new CGPointerTypeRef(new CGPredefinedTypeRef(CGPredefinedType.Void))), Value := 
@@ -196,7 +198,7 @@ begin
         if meth.IsConstructor then begin
           lMeth.Body.Elements.Insert(0, new CGAssignmentStatement(Dest := new CGSelfExpression, Source := new CGInheritedExpression(&VAlue := new CGCallExpression(&Self := new CGIdentifierExpression(ID := 'init')))));
 
-          lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'inst', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject')), Initializer := new CGCallExpression(&Self := new CGIdentifierExpression(&Self :=new  CGIdentifierExpression(ID := 'fType'), ID := 'instantiate')))]))
+          lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'inst', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject')), Initializer := new CGCallExpression(&Self := new CGIdentifierExpression(&Self :=new  CGIdentifierExpression(ID := lFTypePropertyName), ID := 'instantiate')))]))
         end else
           lMeth.Body.Elements.Add(new CGVariableStatement([new CGLocalVariable(Name := 'inst', &Type := new CGPointerTypeRef(new CGNamedTypeRef('MonoObject')), Initializer := new CGIdentifierExpression(ID := '__instance'))]));
         lCall.Arguments.Add(new CGArgument(Value := new CGIdentifierExpression(ID := 'inst')));
@@ -337,7 +339,7 @@ begin
     var lFType := new CGProperty;
     lFType.Static := true;
     lFType.Access := CGAccessModifier.Private;
-    lFType.Name := 'fType';
+    lFType.Name := lFTypePropertyName;
     lFType.Attributes.Add(new CGAttribute(&Type := new CGNamedTypeRef('Lazy')));
     lFType.Type := new CGNamedTypeRef('MZType');
     
@@ -360,7 +362,7 @@ begin
     lGetType.ResultType := 'MZType';
     lGetType.Name := 'getType';
     lGetType.Virtual := CGVirtualBits.Override;
-    lGetType.Body := new CGBeginStatement(new CGExitStatement(Value := new CGIdentifierExpression(ID := 'fType')));
+    lGetType.Body := new CGBeginStatement(new CGExitStatement(Value := new CGIdentifierExpression(ID := lFTypePropertyName)));
 
     lTypeDef.Members.Add(lGetType);
   end;
