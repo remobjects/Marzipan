@@ -12,6 +12,7 @@ type
   MZString = public class(MZObject)
   private
     method get_length: Integer;
+    method get_NSString: NSString;
     class var fLength: method(aInstance: ^MonoObject; aEx: ^^MonoException): Integer;
     class var fType: MZType := MZMonoRuntime.sharedInstance.getCoreType('System.String');
   public
@@ -21,7 +22,7 @@ type
     class method NSStringWithMonoString(s: ^MonoString): NSString;
 
     property length: Integer read get_length;
-    method NSString: NSString;
+    property NSString: NSString read get_NSString;
   end;
 
   MZArray = public class(MZObject)
@@ -96,7 +97,7 @@ begin
   exit new MZString withMonoInstance(^MonoObject(mono_string_from_utf16(^mono_unichar2(s.cStringUsingEncoding(NSStringEncoding.NSUnicodeStringEncoding)))));
 end;
 
-method MZString.NSString: NSString;
+method MZString.get_NSString: NSString;
 begin
   exit Foundation.NSString.stringWithCharacters(^unichar(mono_string_chars(^MonoString(__instance)))) length(mono_string_length(^MonoString(__instance)));
 end;
