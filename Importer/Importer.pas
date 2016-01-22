@@ -26,7 +26,7 @@ type
     fImportNameMapping: Dictionary<String, String> := new Dictionary<String,String>;
     fEnumTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
     fValueTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
-    fPaths: Hashset<String> := new HashSet<String>;
+    fPaths: HashSet<String> := new HashSet<String>;
     fLoaded: Dictionary<String, ModuleDefinition> := new Dictionary<String,ModuleDefinition>;
     fFile: CGFile;
     fResolver:  DefaultAssemblyResolver := new  DefaultAssemblyResolver();
