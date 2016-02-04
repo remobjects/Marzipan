@@ -3,7 +3,8 @@
 //  Targets: x86_64
 //  Dep fx:rtl
 //  Dep libs:mono-2.0.1
-namespace libmono-2.0;
+//  Platform:
+namespace ;
 
 interface
 
@@ -14,6 +15,8 @@ type
 
   mono.utils.mono_unichar2 = public mono_unichar2;
 
+  mono.utils.mono_unichar4 = public mono_unichar4;
+
   mono.utils.MonoFunc = public method (data: ^Void; user_data: ^Void);
 
   mono.utils.MonoHFunc = public method (key: ^Void; value: ^Void; user_data: ^Void);
@@ -21,6 +24,56 @@ type
   mono.utils.__Global = public class
   public
     class method mono_free(Param0: ^Void);
+    class const MONO_COUNTER_INT: Int32;
+    class const MONO_COUNTER_UINT: Int32;
+    class const MONO_COUNTER_WORD: Int32;
+    class const MONO_COUNTER_LONG: Int32;
+    class const MONO_COUNTER_ULONG: Int32;
+    class const MONO_COUNTER_DOUBLE: Int32;
+    class const MONO_COUNTER_STRING: Int32;
+    class const MONO_COUNTER_TIME_INTERVAL: Int32;
+    class const MONO_COUNTER_TYPE_MASK: Int32;
+    class const MONO_COUNTER_CALLBACK: Int32;
+    class const MONO_COUNTER_SECTION_MASK: Int32;
+    class const MONO_COUNTER_JIT: Int64;
+    class const MONO_COUNTER_GC: Int64;
+    class const MONO_COUNTER_METADATA: Int64;
+    class const MONO_COUNTER_GENERICS: Int64;
+    class const MONO_COUNTER_SECURITY: Int64;
+    class const MONO_COUNTER_RUNTIME: Int64;
+    class const MONO_COUNTER_SYSTEM: Int64;
+    class const MONO_COUNTER_PERFCOUNTERS: Int64;
+    class const MONO_COUNTER_LAST_SECTION: Int32;
+    class const MONO_COUNTER_UNIT_SHIFT: Int32;
+    class const MONO_COUNTER_UNIT_MASK: Int64;
+    class const MONO_COUNTER_RAW: Int64;
+    class const MONO_COUNTER_BYTES: Int64;
+    class const MONO_COUNTER_TIME: Int64;
+    class const MONO_COUNTER_COUNT: Int64;
+    class const MONO_COUNTER_PERCENTAGE: Int64;
+    class const MONO_COUNTER_VARIANCE_SHIFT: Int32;
+    class const MONO_COUNTER_VARIANCE_MASK: Int64;
+    class const MONO_COUNTER_MONOTONIC: Int64;
+    class const MONO_COUNTER_CONSTANT: Int64;
+    class const MONO_COUNTER_VARIABLE: Int64;
+    class method mono_counters_enable(section_mask: Int32);
+    class method mono_counters_init;
+    class method mono_counters_register(descr: ^AnsiChar; &type: Int32; addr: ^Void);
+    class method mono_counters_register_with_size(name: ^AnsiChar; &type: Int32; addr: ^Void; size: Int32);
+    class method mono_counters_on_register(callback: mono.utils.MonoCounterRegisterCallback);
+    class method mono_counters_dump(section_mask: Int32; outfile: ^FILE);
+    class method mono_counters_cleanup;
+    class method mono_counters_foreach(cb: mono.utils.CountersEnumCallback; user_data: ^Void);
+    class method mono_counters_sample(counter: ^MonoCounter; buffer: ^Void; buffer_size: Int32): Int32;
+    class method mono_counter_get_name(name: ^MonoCounter): ^AnsiChar;
+    class method mono_counter_get_type(counter: ^MonoCounter): Int32;
+    class method mono_counter_get_section(counter: ^MonoCounter): Int32;
+    class method mono_counter_get_unit(counter: ^MonoCounter): Int32;
+    class method mono_counter_get_variance(counter: ^MonoCounter): Int32;
+    class method mono_counter_get_size(counter: ^MonoCounter): size_t;
+    class method mono_runtime_resource_limit(resource_type: Int32; soft_limit: uintptr_t; hard_limit: uintptr_t): Int32;
+    class method mono_runtime_resource_set_callback(callback: mono.utils.MonoResourceCallback);
+    class method mono_runtime_resource_check_limit(resource_type: Int32; value: uintptr_t);
     class const MONO_DL_LAZY: Int32;
     class const MONO_DL_LOCAL: Int32;
     class const MONO_DL_MASK: Int32;
@@ -46,7 +99,25 @@ type
     class method mono_error_get_message(error: ^mono.utils.MonoError): ^AnsiChar;
     class method mono_trace_set_level_string(value: ^AnsiChar);
     class method mono_trace_set_mask_string(value: ^AnsiChar);
+    class method mono_trace_set_log_handler(callback: mono.utils.MonoLogCallback; user_data: ^Void);
+    class method mono_trace_set_print_handler(callback: mono.utils.MonoPrintCallback);
+    class method mono_trace_set_printerr_handler(callback: mono.utils.MonoPrintCallback);
   end;
+
+  mono.utils.MonoCounter = public MonoCounter;
+
+  mono.utils.MonoCounterRegisterCallback = public method (Param0: ^MonoCounter);
+
+  mono.utils.CountersEnumCallback = public method (counter: ^MonoCounter; user_data: ^Void): mono_bool;
+
+  mono.utils.MonoResourceType = public enum (
+    MONO_RESOURCE_JIT_CODE,
+    MONO_RESOURCE_METADATA,
+    MONO_RESOURCE_GC_HEAP,
+    MONO_RESOURCE_COUNT
+  );
+
+  mono.utils.MonoResourceCallback = public method (resource_type: Int32; value: uintptr_t; is_soft: Int32);
 
   mono.utils.MonoDlFallbackHandler = public MonoDlFallbackHandler;
 
@@ -63,6 +134,18 @@ type
     var hidden_1: array of ^Void;
     var hidden_2: array of AnsiChar;
   end;
+
+  mono.utils.__struct__MonoError = public record
+  public
+    var error_code: UInt16;
+    var hidden_0: UInt16;
+    var hidden_1: array of ^Void;
+    var hidden_2: array of AnsiChar;
+  end;
+
+  mono.utils.MonoLogCallback = public method (log_domain: ^AnsiChar; log_level: ^AnsiChar; message: ^AnsiChar; fatal: mono_bool; user_data: ^Void);
+
+  mono.utils.MonoPrintCallback = public method (string: ^AnsiChar; is_stdout: mono_bool);
 
   mono.metadata.MonoTypeEnum = public enum (
     MONO_TYPE_END,
@@ -148,7 +231,18 @@ type
     MONO_TABLE_NESTEDCLASS,
     MONO_TABLE_GENERICPARAM,
     MONO_TABLE_METHODSPEC,
-    MONO_TABLE_GENERICPARAMCONSTRAINT
+    MONO_TABLE_GENERICPARAMCONSTRAINT,
+    MONO_TABLE_UNUSED8,
+    MONO_TABLE_UNUSED9,
+    MONO_TABLE_UNUSED10,
+    MONO_TABLE_DOCUMENT,
+    MONO_TABLE_METHODBODY,
+    MONO_TABLE_LOCALSCOPE,
+    MONO_TABLE_LOCALVARIABLE,
+    MONO_TABLE_LOCALCONSTANT,
+    MONO_TABLE_IMPORTSCOPE,
+    MONO_TABLE_ASYNCMETHOD,
+    MONO_TABLE_CUSTOMDEBUGINFORMATION
   );
 
   mono.metadata.__Global = public class
@@ -324,6 +418,24 @@ type
     class const MONO_GENPARCONSTRAINT_GENERICPAR: Int32;
     class const MONO_GENPARCONSTRAINT_CONSTRAINT: Int32;
     class const MONO_GENPARCONSTRAINT_SIZE: Int32;
+    class const MONO_DOCUMENT_NAME: Int32;
+    class const MONO_DOCUMENT_HASHALG: Int32;
+    class const MONO_DOCUMENT_HASH: Int32;
+    class const MONO_DOCUMENT_LANGUAGE: Int32;
+    class const MONO_DOCUMENT_SIZE: Int32;
+    class const MONO_METHODBODY_SEQ_POINTS: Int32;
+    class const MONO_METHODBODY_SIZE: Int32;
+    class const MONO_LOCALSCOPE_METHOD: Int32;
+    class const MONO_LOCALSCOPE_IMPORTSCOPE: Int32;
+    class const MONO_LOCALSCOPE_VARIABLELIST: Int32;
+    class const MONO_LOCALSCOPE_CONSTANTLIST: Int32;
+    class const MONO_LOCALSCOPE_STARTOFFSET: Int32;
+    class const MONO_LOCALSCOPE_LENGTH: Int32;
+    class const MONO_LOCALSCOPE_SIZE: Int32;
+    class const MONO_LOCALVARIABLE_ATTRIBUTES: Int32;
+    class const MONO_LOCALVARIABLE_INDEX: Int32;
+    class const MONO_LOCALVARIABLE_NAME: Int32;
+    class const MONO_LOCALVARIABLE_SIZE: Int32;
     class const MONO_TYPEDEFORREF_TYPEDEF: Int32;
     class const MONO_TYPEDEFORREF_TYPEREF: Int32;
     class const MONO_TYPEDEFORREF_TYPESPEC: Int32;
@@ -396,6 +508,12 @@ type
     class const MONO_CUSTOM_ATTR_TYPE_STRING: Int32;
     class const MONO_CUSTOM_ATTR_TYPE_BITS: Int32;
     class const MONO_CUSTOM_ATTR_TYPE_MASK: Int32;
+    class const MONO_RESOLUTION_SCOPE_MODULE: Int32;
+    class const MONO_RESOLUTION_SCOPE_MODULEREF: Int32;
+    class const MONO_RESOLUTION_SCOPE_ASSEMBLYREF: Int32;
+    class const MONO_RESOLUTION_SCOPE_TYPEREF: Int32;
+    class const MONO_RESOLUTION_SCOPE_BITS: Int32;
+    class const MONO_RESOLUTION_SCOPE_MASK: Int32;
     class const MONO_RESOLTION_SCOPE_MODULE: Int32;
     class const MONO_RESOLTION_SCOPE_MODULEREF: Int32;
     class const MONO_RESOLTION_SCOPE_ASSEMBLYREF: Int32;
@@ -472,7 +590,7 @@ type
     class method mono_metadata_field_info(meta: ^MonoImage; table_index: uint32_t; offset: ^uint32_t; rva: ^uint32_t; marshal_spec: ^^mono.metadata.MonoMarshalSpec);
     class method mono_metadata_get_constant_index(meta: ^MonoImage; token: uint32_t; hint: uint32_t): uint32_t;
     class method mono_metadata_decode_value(ptr: ^AnsiChar; rptr: ^^AnsiChar): uint32_t;
-    class method mono_metadata_decode_signed_value(ptr: ^AnsiChar; rptr: ^^AnsiChar): Int32;
+    class method mono_metadata_decode_signed_value(ptr: ^AnsiChar; rptr: ^^AnsiChar): int32_t;
     class method mono_metadata_decode_blob_size(ptr: ^AnsiChar; rptr: ^^AnsiChar): uint32_t;
     class method mono_metadata_encode_value(value: uint32_t; bug: ^AnsiChar; endbuf: ^^AnsiChar);
     class method mono_type_is_byref(&type: ^MonoType): mono_bool;
@@ -493,6 +611,7 @@ type
     class method mono_signature_vararg_start(sig: ^MonoMethodSignature): Int32;
     class method mono_signature_is_instance(sig: ^MonoMethodSignature): mono_bool;
     class method mono_signature_explicit_this(sig: ^MonoMethodSignature): mono_bool;
+    class method mono_signature_param_is_out(sig: ^MonoMethodSignature; param_num: Int32): mono_bool;
     class method mono_metadata_parse_typedef_or_ref(m: ^MonoImage; ptr: ^AnsiChar; rptr: ^^AnsiChar): uint32_t;
     class method mono_metadata_parse_custom_mod(m: ^MonoImage; dest: ^mono.metadata.MonoCustomMod; ptr: ^AnsiChar; rptr: ^^AnsiChar): Int32;
     class method mono_metadata_parse_array(m: ^MonoImage; ptr: ^AnsiChar; rptr: ^^AnsiChar): ^MonoArrayType;
@@ -557,6 +676,7 @@ type
     class method mono_method_get_last_managed: ^MonoMethod;
     class method mono_stack_walk(func: mono.metadata.MonoStackWalk; user_data: ^Void);
     class method mono_stack_walk_no_il(func: mono.metadata.MonoStackWalk; user_data: ^Void);
+    class method mono_stack_walk_async_safe(func: mono.metadata.MonoStackWalkAsyncSafe; initial_sig_context: ^Void; user_data: ^Void);
     class method mono_class_get(image: ^MonoImage; type_token: uint32_t): ^MonoClass;
     class method mono_class_get_full(image: ^MonoImage; type_token: uint32_t; context: ^MonoGenericContext): ^MonoClass;
     class method mono_class_init(klass: ^MonoClass): mono_bool;
@@ -565,6 +685,7 @@ type
     class method mono_class_from_name_case(image: ^MonoImage; name_space: ^AnsiChar; name: ^AnsiChar): ^MonoClass;
     class method mono_class_get_method_from_name_flags(klass: ^MonoClass; name: ^AnsiChar; param_count: Int32; &flags: Int32): ^MonoMethod;
     class method mono_class_from_typeref(image: ^MonoImage; type_token: uint32_t): ^MonoClass;
+    class method mono_class_from_typeref_checked(image: ^MonoImage; type_token: uint32_t; error: ^mono.utils.MonoError): ^MonoClass;
     class method mono_class_from_generic_parameter(param: ^MonoGenericParam; image: ^MonoImage; is_mvar: mono_bool): ^MonoClass;
     class method mono_class_inflate_generic_type(&type: ^MonoType; context: ^MonoGenericContext): ^MonoType;
     class method mono_class_inflate_generic_method(&method: ^MonoMethod; context: ^MonoGenericContext): ^MonoMethod;
@@ -579,12 +700,12 @@ type
     class method mono_class_get_event_token(&event: ^MonoEvent): uint32_t;
     class method mono_class_get_property_from_name(klass: ^MonoClass; name: ^AnsiChar): ^MonoProperty;
     class method mono_class_get_property_token(prop: ^MonoProperty): uint32_t;
-    class method mono_array_element_size(ac: ^MonoClass): Int32;
-    class method mono_class_instance_size(klass: ^MonoClass): Int32;
-    class method mono_class_array_element_size(klass: ^MonoClass): Int32;
-    class method mono_class_data_size(klass: ^MonoClass): Int32;
-    class method mono_class_value_size(klass: ^MonoClass; align: ^uint32_t): Int32;
-    class method mono_class_min_align(klass: ^MonoClass): Int32;
+    class method mono_array_element_size(ac: ^MonoClass): int32_t;
+    class method mono_class_instance_size(klass: ^MonoClass): int32_t;
+    class method mono_class_array_element_size(klass: ^MonoClass): int32_t;
+    class method mono_class_data_size(klass: ^MonoClass): int32_t;
+    class method mono_class_value_size(klass: ^MonoClass; align: ^uint32_t): int32_t;
+    class method mono_class_min_align(klass: ^MonoClass): int32_t;
     class method mono_class_from_mono_type(&type: ^MonoType): ^MonoClass;
     class method mono_class_is_subclass_of(klass: ^MonoClass; klassc: ^MonoClass; check_interfaces: mono_bool): mono_bool;
     class method mono_class_is_assignable_from(klass: ^MonoClass; oklass: ^MonoClass): mono_bool;
@@ -615,6 +736,8 @@ type
     class method mono_class_get_events(klass: ^MonoClass; iter: ^^Void): ^MonoEvent;
     class method mono_class_get_interfaces(klass: ^MonoClass; iter: ^^Void): ^MonoClass;
     class method mono_class_get_nested_types(klass: ^MonoClass; iter: ^^Void): ^MonoClass;
+    class method mono_class_is_delegate(klass: ^MonoClass): mono_bool;
+    class method mono_class_implements_interface(klass: ^MonoClass; iface: ^MonoClass): mono_bool;
     class method mono_field_get_name(field: ^MonoClassField): ^AnsiChar;
     class method mono_field_get_type(field: ^MonoClassField): ^MonoType;
     class method mono_field_get_parent(field: ^MonoClassField): ^MonoClass;
@@ -643,24 +766,27 @@ type
     class method mono_object_new_fast(vtable: ^MonoVTable): ^mono.metadata.MonoObject;
     class method mono_object_new_alloc_specific(vtable: ^MonoVTable): ^mono.metadata.MonoObject;
     class method mono_object_new_from_token(domain: ^MonoDomain; image: ^MonoImage; token: uint32_t): ^mono.metadata.MonoObject;
-    class method mono_array_new(domain: ^MonoDomain; eclass: ^MonoClass; n: UInt64): ^MonoArray;
-    class method mono_array_new_full(domain: ^MonoDomain; array_class: ^MonoClass; lengths: ^UInt64; lower_bounds: ^Int64): ^MonoArray;
-    class method mono_array_new_specific(vtable: ^MonoVTable; n: UInt64): ^MonoArray;
+    class method mono_array_new(domain: ^MonoDomain; eclass: ^MonoClass; n: uintptr_t): ^MonoArray;
+    class method mono_array_new_full(domain: ^MonoDomain; array_class: ^MonoClass; lengths: ^uintptr_t; lower_bounds: ^intptr_t): ^MonoArray;
+    class method mono_array_new_specific(vtable: ^MonoVTable; n: uintptr_t): ^MonoArray;
     class method mono_array_clone(&array: ^MonoArray): ^MonoArray;
-    class method mono_array_addr_with_size(&array: ^MonoArray; size: Int32; idx: UInt64): ^AnsiChar;
-    class method mono_array_length(&array: ^MonoArray): UInt64;
-    class method mono_string_new_utf16(domain: ^MonoDomain; text: ^mono_unichar2; len: Int32): ^MonoString;
-    class method mono_string_new_size(domain: ^MonoDomain; len: Int32): ^MonoString;
+    class method mono_array_addr_with_size(&array: ^MonoArray; size: Int32; idx: uintptr_t): ^AnsiChar;
+    class method mono_array_length(&array: ^MonoArray): uintptr_t;
+    class method mono_string_new_utf16(domain: ^MonoDomain; text: ^mono_unichar2; len: int32_t): ^MonoString;
+    class method mono_string_new_size(domain: ^MonoDomain; len: int32_t): ^MonoString;
     class method mono_ldstr(domain: ^MonoDomain; image: ^MonoImage; str_index: uint32_t): ^MonoString;
     class method mono_string_is_interned(str: ^MonoString): ^MonoString;
     class method mono_string_intern(str: ^MonoString): ^MonoString;
     class method mono_string_new(domain: ^MonoDomain; text: ^AnsiChar): ^MonoString;
     class method mono_string_new_wrapper(text: ^AnsiChar): ^MonoString;
     class method mono_string_new_len(domain: ^MonoDomain; text: ^AnsiChar; length: UInt32): ^MonoString;
+    class method mono_string_new_utf32(domain: ^MonoDomain; text: ^mono_unichar4; len: int32_t): ^MonoString;
     class method mono_string_to_utf8(string_obj: ^MonoString): ^AnsiChar;
     class method mono_string_to_utf8_checked(string_obj: ^MonoString; error: ^mono.utils.MonoError): ^AnsiChar;
     class method mono_string_to_utf16(string_obj: ^MonoString): ^mono_unichar2;
+    class method mono_string_to_utf32(string_obj: ^MonoString): ^mono_unichar4;
     class method mono_string_from_utf16(data: ^mono_unichar2): ^MonoString;
+    class method mono_string_from_utf32(data: ^mono_unichar4): ^MonoString;
     class method mono_string_equal(s1: ^MonoString; s2: ^MonoString): mono_bool;
     class method mono_string_hash(s: ^MonoString): UInt32;
     class method mono_object_hash(obj: ^mono.metadata.MonoObject): Int32;
@@ -677,6 +803,7 @@ type
     class method mono_object_castclass_mbyref(obj: ^mono.metadata.MonoObject; klass: ^MonoClass): ^mono.metadata.MonoObject;
     class method mono_monitor_try_enter(obj: ^mono.metadata.MonoObject; ms: uint32_t): mono_bool;
     class method mono_monitor_enter(obj: ^mono.metadata.MonoObject): mono_bool;
+    class method mono_monitor_enter_v4(obj: ^mono.metadata.MonoObject; lock_taken: ^AnsiChar);
     class method mono_object_get_size(o: ^mono.metadata.MonoObject): UInt32;
     class method mono_monitor_exit(obj: ^mono.metadata.MonoObject);
     class method mono_raise_exception(ex: ^MonoException);
@@ -685,6 +812,8 @@ type
     class method mono_object_get_virtual_method(obj: ^mono.metadata.MonoObject; &method: ^MonoMethod): ^MonoMethod;
     class method mono_runtime_invoke(&method: ^MonoMethod; obj: ^Void; &params: ^^Void; exc: ^^mono.metadata.MonoObject): ^mono.metadata.MonoObject;
     class method mono_get_delegate_invoke(klass: ^MonoClass): ^MonoMethod;
+    class method mono_get_delegate_begin_invoke(klass: ^MonoClass): ^MonoMethod;
+    class method mono_get_delegate_end_invoke(klass: ^MonoClass): ^MonoMethod;
     class method mono_runtime_delegate_invoke(&delegate: ^mono.metadata.MonoObject; &params: ^^Void; exc: ^^mono.metadata.MonoObject): ^mono.metadata.MonoObject;
     class method mono_runtime_invoke_array(&method: ^MonoMethod; obj: ^Void; &params: ^MonoArray; exc: ^^mono.metadata.MonoObject): ^mono.metadata.MonoObject;
     class method mono_method_get_unmanaged_thunk(&method: ^MonoMethod): ^Void;
@@ -692,6 +821,7 @@ type
     class method mono_runtime_exec_managed_code(domain: ^MonoDomain; main_func: mono.metadata.MonoMainThreadFunc; main_args: ^Void);
     class method mono_runtime_run_main(&method: ^MonoMethod; argc: Int32; argv: ^^AnsiChar; exc: ^^mono.metadata.MonoObject): Int32;
     class method mono_runtime_exec_main(&method: ^MonoMethod; args: ^MonoArray; exc: ^^mono.metadata.MonoObject): Int32;
+    class method mono_runtime_set_main_args(argc: Int32; argv: ^^AnsiChar): Int32;
     class method mono_load_remote_field(this_obj: ^mono.metadata.MonoObject; klass: ^MonoClass; field: ^MonoClassField; res: ^^Void): ^Void;
     class method mono_load_remote_field_new(this_obj: ^mono.metadata.MonoObject; klass: ^MonoClass; field: ^MonoClassField): ^mono.metadata.MonoObject;
     class method mono_store_remote_field(this_obj: ^mono.metadata.MonoObject; klass: ^MonoClass; field: ^MonoClassField; val: ^Void);
@@ -710,10 +840,14 @@ type
     class method mono_gchandle_new_weakref(obj: ^mono.metadata.MonoObject; track_resurrection: mono_bool): uint32_t;
     class method mono_gchandle_get_target(gchandle: uint32_t): ^mono.metadata.MonoObject;
     class method mono_gchandle_free(gchandle: uint32_t);
+    class method mono_gc_reference_queue_new(callback: mono.metadata.MonoMainThreadFunc): ^MonoReferenceQueue;
+    class method mono_gc_reference_queue_free(queue: ^MonoReferenceQueue);
+    class method mono_gc_reference_queue_add(queue: ^MonoReferenceQueue; obj: ^mono.metadata.MonoObject; user_data: ^Void): mono_bool;
     class method mono_gc_wbarrier_set_field(obj: ^mono.metadata.MonoObject; field_ptr: ^Void; value: ^mono.metadata.MonoObject);
     class method mono_gc_wbarrier_set_arrayref(arr: ^MonoArray; slot_ptr: ^Void; value: ^mono.metadata.MonoObject);
     class method mono_gc_wbarrier_arrayref_copy(dest_ptr: ^Void; src_ptr: ^Void; count: Int32);
     class method mono_gc_wbarrier_generic_store(ptr: ^Void; value: ^mono.metadata.MonoObject);
+    class method mono_gc_wbarrier_generic_store_atomic(ptr: ^Void; value: ^mono.metadata.MonoObject);
     class method mono_gc_wbarrier_generic_nostore(ptr: ^Void);
     class method mono_gc_wbarrier_value_copy(dest: ^Void; src: ^Void; count: Int32; klass: ^MonoClass);
     class method mono_gc_wbarrier_object_copy(obj: ^mono.metadata.MonoObject; src: ^mono.metadata.MonoObject);
@@ -779,6 +913,7 @@ type
     class method mono_declsec_get_class_action(klass: ^MonoClass; action: uint32_t; entry: ^mono.metadata.MonoDeclSecurityEntry): MonoBoolean;
     class method mono_declsec_get_assembly_action(&assembly: ^MonoAssembly; action: uint32_t; entry: ^mono.metadata.MonoDeclSecurityEntry): MonoBoolean;
     class method mono_reflection_type_get_type(reftype: ^MonoReflectionType): ^MonoType;
+    class method mono_reflection_assembly_get_assembly(refassembly: ^MonoReflectionAssembly): ^MonoAssembly;
     class method mono_init(filename: ^AnsiChar): ^MonoDomain;
     class method mono_init_from_assembly(domain_name: ^AnsiChar; filename: ^AnsiChar): ^MonoDomain;
     class method mono_init_version(domain_name: ^AnsiChar; version: ^AnsiChar): ^MonoDomain;
@@ -792,9 +927,10 @@ type
     class method mono_check_corlib_version: ^AnsiChar;
     class method mono_domain_create: ^MonoDomain;
     class method mono_domain_create_appdomain(friendly_name: ^AnsiChar; configuration_file: ^AnsiChar): ^MonoDomain;
+    class method mono_domain_set_config(domain: ^MonoDomain; base_dir: ^AnsiChar; config_file_name: ^AnsiChar);
     class method mono_domain_get: ^MonoDomain;
-    class method mono_domain_get_by_id(domainid: Int32): ^MonoDomain;
-    class method mono_domain_get_id(domain: ^MonoDomain): Int32;
+    class method mono_domain_get_by_id(domainid: int32_t): ^MonoDomain;
+    class method mono_domain_get_id(domain: ^MonoDomain): int32_t;
     class method mono_domain_set(domain: ^MonoDomain; force: mono_bool): mono_bool;
     class method mono_domain_set_internal(domain: ^MonoDomain);
     class method mono_domain_unload(domain: ^MonoDomain);
@@ -1051,8 +1187,8 @@ type
     class method mono_method_desc_search_in_image(&desc: ^MonoMethodDesc; image: ^MonoImage): ^MonoMethod;
     class method mono_method_full_name(&method: ^MonoMethod; signature: mono_bool): ^AnsiChar;
     class method mono_field_full_name(field: ^MonoClassField): ^AnsiChar;
-    class method mono_environment_exitcode_get: Int32;
-    class method mono_environment_exitcode_set(value: Int32);
+    class method mono_environment_exitcode_get: int32_t;
+    class method mono_environment_exitcode_set(value: int32_t);
     class method mono_exception_from_name(image: ^MonoImage; name_space: ^AnsiChar; name: ^AnsiChar): ^MonoException;
     class method mono_exception_from_token(image: ^MonoImage; token: uint32_t): ^MonoException;
     class method mono_exception_from_name_two_strings(image: ^MonoImage; name_space: ^AnsiChar; name: ^AnsiChar; a1: ^MonoString; a2: ^MonoString): ^MonoException;
@@ -1104,19 +1240,15 @@ type
     class method mono_config_for_assembly(&assembly: ^MonoImage);
     class method mono_config_parse_memory(buffer: ^AnsiChar);
     class method mono_config_string_for_assembly_file(filename: ^AnsiChar): ^AnsiChar;
-    class var mono_symbol_table: ^MonoSymbolTable;
-    class var mono_debug_format: mono.metadata.MonoDebugFormat;
-    class var mono_debug_debugger_version: Int32;
-    class var _mono_debug_using_mono_debugger: Int32;
-    class method mono_debug_list_add(list: ^^MonoDebugList; data: ^Void);
-    class method mono_debug_list_remove(list: ^^MonoDebugList; data: ^Void);
+    class method mono_config_set_server_mode(server_mode: mono_bool);
+    class method mono_config_is_server_mode: mono_bool;
+    class method mono_debug_enabled: mono_bool;
     class method mono_debug_init(format: mono.metadata.MonoDebugFormat);
     class method mono_debug_open_image_from_memory(image: ^MonoImage; raw_contents: ^mono_byte; size: Int32);
     class method mono_debug_cleanup;
     class method mono_debug_close_image(image: ^MonoImage);
     class method mono_debug_domain_unload(domain: ^MonoDomain);
     class method mono_debug_domain_create(domain: ^MonoDomain);
-    class method mono_debug_using_mono_debugger: mono_bool;
     class method mono_debug_add_method(&method: ^MonoMethod; jit: ^MonoDebugMethodJitInfo; domain: ^MonoDomain): ^MonoDebugMethodAddress;
     class method mono_debug_remove_method(&method: ^MonoMethod; domain: ^MonoDomain);
     class method mono_debug_lookup_method(&method: ^MonoMethod): ^MonoDebugMethodInfo;
@@ -1126,7 +1258,7 @@ type
     class method mono_debug_add_delegate_trampoline(code: ^Void; size: Int32);
     class method mono_debug_lookup_locals(&method: ^MonoMethod): ^MonoDebugLocalsInfo;
     class method mono_debug_lookup_source_location(&method: ^MonoMethod; address: uint32_t; domain: ^MonoDomain): ^MonoDebugSourceLocation;
-    class method mono_debug_il_offset_from_address(&method: ^MonoMethod; domain: ^MonoDomain; native_offset: uint32_t): Int32;
+    class method mono_debug_il_offset_from_address(&method: ^MonoMethod; domain: ^MonoDomain; native_offset: uint32_t): int32_t;
     class method mono_debug_free_source_location(location: ^MonoDebugSourceLocation);
     class method mono_debug_print_stack_frame(&method: ^MonoMethod; native_offset: uint32_t; domain: ^MonoDomain): ^AnsiChar;
     class method mono_debugger_method_has_breakpoint(&method: ^MonoMethod): Int32;
@@ -1137,8 +1269,8 @@ type
     class method mono_gc_max_generation: Int32;
     class method mono_gc_get_generation(object: ^mono.metadata.MonoObject): Int32;
     class method mono_gc_collection_count(generation: Int32): Int32;
-    class method mono_gc_get_used_size: Int64;
-    class method mono_gc_get_heap_size: Int64;
+    class method mono_gc_get_used_size: int64_t;
+    class method mono_gc_get_heap_size: int64_t;
     class method mono_gc_invoke_finalizers: Int32;
     class method mono_gc_walk_heap(&flags: Int32; callback: mono.metadata.MonoGCReferences; data: ^Void): Int32;
     class const MONO_FLOW_NEXT: Int32;
@@ -1199,6 +1331,7 @@ type
     class method mono_profiler_install_code_buffer_new(callback: mono.metadata.MonoProfilerCodeBufferNew);
     class method mono_profiler_install_iomap(callback: mono.metadata.MonoProfileIomapFunc);
     class method mono_profiler_load(&desc: ^AnsiChar);
+    class method mono_profiler_set_statistical_mode(mode: mono.metadata.MonoProfileSamplingMode; sampling_frequency_is_us: int64_t);
     class method mono_thread_init(start_cb: mono.metadata.MonoThreadStartCB; attach_cb: mono.metadata.MonoThreadAttachCB);
     class method mono_thread_cleanup;
     class method mono_thread_manage;
@@ -1206,7 +1339,7 @@ type
     class method mono_thread_set_main(thread: ^MonoThread);
     class method mono_thread_get_main: ^MonoThread;
     class method mono_thread_stop(thread: ^MonoThread);
-    class method mono_thread_new_init(tid: Int64; stack_start: ^Void; func: ^Void);
+    class method mono_thread_new_init(tid: intptr_t; stack_start: ^Void; func: ^Void);
     class method mono_thread_create(domain: ^MonoDomain; func: ^Void; arg: ^Void);
     class method mono_thread_attach(domain: ^MonoDomain): ^MonoThread;
     class method mono_thread_detach(thread: ^MonoThread);
@@ -1215,6 +1348,8 @@ type
     class method mono_threads_set_default_stacksize(stacksize: uint32_t);
     class method mono_threads_get_default_stacksize: uint32_t;
     class method mono_threads_request_thread_dump;
+    class method mono_thread_is_foreign(thread: ^MonoThread): mono_bool;
+    class method mono_thread_detach_if_exiting;
     class const MONO_TABLE_LAST: Int32;
     class const MONO_TABLE_NUM: Int32;
     class const MONO_ZERO_LEN_ARRAY: Int32;
@@ -1226,6 +1361,9 @@ type
     class const MONO_DEBUG_VAR_ADDRESS_MODE_REGOFFSET: Int32;
     class const MONO_DEBUG_VAR_ADDRESS_MODE_TWO_REGISTERS: Int32;
     class const MONO_DEBUG_VAR_ADDRESS_MODE_DEAD: Int32;
+    class const MONO_DEBUG_VAR_ADDRESS_MODE_REGOFFSET_INDIR: Int32;
+    class const MONO_DEBUG_VAR_ADDRESS_MODE_GSHAREDVT_LOCAL: Int32;
+    class const MONO_DEBUG_VAR_ADDRESS_MODE_VTADDR: Int32;
     class const MONO_DEBUGGER_MAJOR_VERSION: Int32;
     class const MONO_DEBUGGER_MINOR_VERSION: Int32;
     class const MONO_DEBUGGER_MAGIC: UInt64;
@@ -1411,21 +1549,22 @@ type
   array_data_type nested in mono.metadata.MonoMarshalSpec.data_type = public record
   public
     var elem_type: mono.metadata.MonoMarshalNative;
-    var num_elem: Int32;
-    var param_num: Int16;
-    var elem_mult: Int16;
+    var num_elem: int32_t;
+    var param_num: int16_t;
+    var elem_mult: int16_t;
   end;
 
   custom_data_type nested in mono.metadata.MonoMarshalSpec.data_type = public record
   public
     var custom_name: ^AnsiChar;
     var cookie: ^AnsiChar;
+    var image: ^MonoImage;
   end;
 
   safearray_data_type nested in mono.metadata.MonoMarshalSpec.data_type = public record
   public
     var elem_type: mono.metadata.MonoMarshalVariant;
-    var num_elem: Int32;
+    var num_elem: int32_t;
   end;
 
   mono.metadata.MonoExceptionClause = public record
@@ -1492,7 +1631,9 @@ type
     MONO_PARSE_FIELD
   );
 
-  mono.metadata.MonoStackWalk = public method (&method: ^MonoMethod; native_offset: Int32; il_offset: Int32; managed: mono_bool; data: ^Void): mono_bool;
+  mono.metadata.MonoStackWalk = public method (&method: ^MonoMethod; native_offset: int32_t; il_offset: int32_t; managed: mono_bool; data: ^Void): mono_bool;
+
+  mono.metadata.MonoStackWalkAsyncSafe = public method (&method: ^MonoMethod; domain: ^MonoDomain; base_address: ^Void; offset: Int32; data: ^Void): mono_bool;
 
   mono.metadata.MonoVTable = public MonoVTable;
 
@@ -1544,11 +1685,21 @@ type
     var synchronisation: ^MonoThreadsSync;
   end;
 
+  mono.metadata.__struct__MonoObject = public record
+  public
+    var vtable: ^MonoVTable;
+    var synchronisation: ^MonoThreadsSync;
+  end;
+
   mono.metadata.MonoInvokeFunc = public method (&method: ^MonoMethod; obj: ^Void; &params: ^^Void; exc: ^^mono.metadata.MonoObject): ^mono.metadata.MonoObject;
 
   mono.metadata.MonoCompileFunc = public method (&method: ^MonoMethod): ^Void;
 
   mono.metadata.MonoMainThreadFunc = public method (user_data: ^Void);
+
+  mono.metadata.mono_reference_queue_callback = public method (user_data: ^Void);
+
+  mono.metadata.MonoReferenceQueue = public MonoReferenceQueue;
 
   mono.metadata.MonoTypeNameParse = public MonoTypeNameParse;
 
@@ -1598,9 +1749,9 @@ type
     var demandchoice: mono.metadata.MonoDeclSecurityEntry;
   end;
 
-  mono.metadata.MonoThreadStartCB = public method (tid: Int64; stack_start: ^Void; func: ^Void);
+  mono.metadata.MonoThreadStartCB = public method (tid: intptr_t; stack_start: ^Void; func: ^Void);
 
-  mono.metadata.MonoThreadAttachCB = public method (tid: Int64; stack_start: ^Void);
+  mono.metadata.MonoThreadAttachCB = public method (tid: intptr_t; stack_start: ^Void);
 
   mono.metadata.MonoAppDomain = public MonoAppDomain;
 
@@ -1646,6 +1797,8 @@ type
   mono.metadata.MonoDebugDataTable = public MonoDebugDataTable;
 
   mono.metadata.MonoSymbolFile = public MonoSymbolFile;
+
+  mono.metadata.MonoPPDBFile = public MonoPPDBFile;
 
   mono.metadata.MonoDebugHandle = public MonoDebugHandle;
 
@@ -1699,6 +1852,7 @@ type
     var image: ^MonoImage;
     var type_table: ^MonoDebugDataTable;
     var symfile: ^MonoSymbolFile;
+    var ppdb: ^MonoPPDBFile;
   end;
 
   mono.metadata.__struct__MonoDebugMethodJitInfo = public record
@@ -1715,6 +1869,8 @@ type
     var &params: ^MonoDebugVarInfo;
     var num_locals: uint32_t;
     var locals: ^MonoDebugVarInfo;
+    var gsharedvt_info_var: ^MonoDebugVarInfo;
+    var gsharedvt_locals_var: ^MonoDebugVarInfo;
   end;
 
   mono.metadata.__struct__MonoDebugMethodAddressList = public record
@@ -1742,7 +1898,7 @@ type
     var &type: ^MonoType;
   end;
 
-  mono.metadata.MonoGCReferences = public method (obj: ^mono.metadata.MonoObject; klass: ^MonoClass; size: UInt64; num: UInt64; refs: ^^mono.metadata.MonoObject; offsets: ^UInt64; data: ^Void): Int32;
+  mono.metadata.MonoGCReferences = public method (obj: ^mono.metadata.MonoObject; klass: ^MonoClass; size: uintptr_t; num: uintptr_t; refs: ^^mono.metadata.MonoObject; offsets: ^uintptr_t; data: ^Void): Int32;
 
   mono.metadata.MonoOpcodeEnum = public enum (
     MONO_CEE_NOP,
@@ -2057,6 +2213,10 @@ type
     MONO_CEE_MONO_MEMORY_BARRIER,
     MONO_CEE_MONO_JIT_ATTACH,
     MONO_CEE_MONO_JIT_DETACH,
+    MONO_CEE_MONO_JIT_ICALL_ADDR,
+    MONO_CEE_MONO_LDPTR_INT_REQ_FLAG,
+    MONO_CEE_MONO_LDPTR_CARD_TABLE,
+    MONO_CEE_MONO_LDPTR_NURSERY_START,
     MONO_CEE_LAST
   );
 
@@ -2123,6 +2283,15 @@ type
   mono.metadata.MonoProfilerCodeBufferType = public enum (
     MONO_PROFILER_CODE_BUFFER_UNKNOWN,
     MONO_PROFILER_CODE_BUFFER_METHOD,
+    MONO_PROFILER_CODE_BUFFER_METHOD_TRAMPOLINE,
+    MONO_PROFILER_CODE_BUFFER_UNBOX_TRAMPOLINE,
+    MONO_PROFILER_CODE_BUFFER_IMT_TRAMPOLINE,
+    MONO_PROFILER_CODE_BUFFER_GENERICS_TRAMPOLINE,
+    MONO_PROFILER_CODE_BUFFER_SPECIFIC_TRAMPOLINE,
+    MONO_PROFILER_CODE_BUFFER_HELPER,
+    MONO_PROFILER_CODE_BUFFER_MONITOR,
+    MONO_PROFILER_CODE_BUFFER_DELEGATE_INVOKE,
+    MONO_PROFILER_CODE_BUFFER_EXCEPTION_HANDLING,
     MONO_PROFILER_CODE_BUFFER_LAST
   );
 
@@ -2191,9 +2360,9 @@ type
 
   mono.metadata.MonoProfileMethodInline = public method (prof: ^MonoProfiler; parent: ^MonoMethod; child: ^MonoMethod; ok: ^Int32);
 
-  mono.metadata.MonoProfileThreadFunc = public method (prof: ^MonoProfiler; tid: UInt64);
+  mono.metadata.MonoProfileThreadFunc = public method (prof: ^MonoProfiler; tid: uintptr_t);
 
-  mono.metadata.MonoProfileThreadNameFunc = public method (prof: ^MonoProfiler; tid: UInt64; name: ^AnsiChar);
+  mono.metadata.MonoProfileThreadNameFunc = public method (prof: ^MonoProfiler; tid: uintptr_t; name: ^AnsiChar);
 
   mono.metadata.MonoProfileAllocFunc = public method (prof: ^MonoProfiler; obj: ^mono.metadata.MonoObject; klass: ^MonoClass);
 
@@ -2205,11 +2374,11 @@ type
 
   mono.metadata.MonoProfileGCMoveFunc = public method (prof: ^MonoProfiler; objects: ^^Void; num: Int32);
 
-  mono.metadata.MonoProfileGCResizeFunc = public method (prof: ^MonoProfiler; new_size: Int64);
+  mono.metadata.MonoProfileGCResizeFunc = public method (prof: ^MonoProfiler; new_size: int64_t);
 
-  mono.metadata.MonoProfileGCHandleFunc = public method (prof: ^MonoProfiler; op: Int32; &type: Int32; handle: UInt64; obj: ^mono.metadata.MonoObject);
+  mono.metadata.MonoProfileGCHandleFunc = public method (prof: ^MonoProfiler; op: Int32; &type: Int32; handle: uintptr_t; obj: ^mono.metadata.MonoObject);
 
-  mono.metadata.MonoProfileGCRootFunc = public method (prof: ^MonoProfiler; num_roots: Int32; objects: ^^Void; root_types: ^Int32; extra_info: ^UInt64);
+  mono.metadata.MonoProfileGCRootFunc = public method (prof: ^MonoProfiler; num_roots: Int32; objects: ^^Void; root_types: ^Int32; extra_info: ^uintptr_t);
 
   mono.metadata.MonoProfileIomapFunc = public method (prof: ^MonoProfiler; report: ^AnsiChar; pathname: ^AnsiChar; new_pathname: ^AnsiChar);
 
@@ -2222,6 +2391,11 @@ type
   mono.metadata.MonoProfilerCodeChunkDestroy = public method (prof: ^MonoProfiler; chunk: ^Void);
 
   mono.metadata.MonoProfilerCodeBufferNew = public method (prof: ^MonoProfiler; buffer: ^Void; size: Int32; &type: mono.metadata.MonoProfilerCodeBufferType; data: ^Void);
+
+  mono.metadata.MonoProfileSamplingMode = public enum (
+    MONO_PROFILER_STAT_MODE_PROCESS,
+    MONO_PROFILER_STAT_MODE_REAL
+  );
 
   mono.metadata.MonoThreadManageCallback = public method (thread: ^MonoThread): mono_bool;
 
@@ -2261,10 +2435,22 @@ type
     class method mono_jit_cleanup(domain: ^MonoDomain);
     class method mono_jit_set_trace_options(options: ^AnsiChar): mono_bool;
     class method mono_set_signal_chaining(chain_signals: mono_bool);
+    class method mono_set_crash_chaining(chain_signals: mono_bool);
     class method mono_jit_set_aot_only(aot_only: mono_bool);
+    class method mono_jit_set_aot_mode(mode: mono.jit.MonoAotMode);
     class method mono_set_break_policy(policy_callback: mono.jit.MonoBreakPolicyFunc);
     class method mono_jit_parse_options(argc: Int32; argv: ^^AnsiChar);
+    class method mono_get_runtime_build_info: ^AnsiChar;
+    class method mono_get_jit_info_from_method(domain: ^MonoDomain; &method: ^MonoMethod): ^MonoJitInfo;
+    class method mono_aot_get_method(domain: ^MonoDomain; &method: ^MonoMethod): ^Void;
   end;
+
+  mono.jit.MonoAotMode = public enum (
+    MONO_AOT_MODE_NONE,
+    MONO_AOT_MODE_NORMAL,
+    MONO_AOT_MODE_HYBRID,
+    MONO_AOT_MODE_FULL
+  );
 
   mono.jit.MonoBreakPolicy = public enum (
     MONO_BREAK_POLICY_ALWAYS,
