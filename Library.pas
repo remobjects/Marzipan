@@ -77,6 +77,7 @@ type
 
 implementation
 
+{ MZString }
 
 class method MZString.getType: MZType;
 begin
@@ -127,6 +128,31 @@ begin
   exit mono_string_from_utf16(^mono_unichar2(self.cStringUsingEncoding(NSStringEncoding.NSUnicodeStringEncoding)));
 end;
 
+{ MZArray }
+
+constructor MZArray withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
+begin
+  self := inherited initWithMonoInstance(aInst);
+  if assigned(self) then begin
+    &type := aType;
+  end;
+  result := self;
+end;
+
+constructor MZArray withNSArray(aArray: NSArray);
+begin
+  if aArray.count > 0 then begin
+    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type((aArray[0] as MZType).type), aArray.count) as ^MonoObject);
+    for a in aArray index i do begin
+      var lInst := MZObject(aArray[i]):__instance;
+      elements[i] := lInst;
+    end;
+  end
+  else begin
+    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(MZMonoRuntime.sharedInstance.getCoreType('System.Object').type), 0) as ^MonoObject);
+  end;
+end;
+
 method MZArray.objectAtIndex(aIndex: Integer): id;
 begin
   var lItem := elements[aIndex];
@@ -174,29 +200,6 @@ begin
   exit lTmp;
 end;
 
-constructor MZArray withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
-begin
-  self := inherited initWithMonoInstance(aInst);
-  if assigned(self) then begin
-    &type := aType;
-  end;
-  result := self;
-end;
-
-constructor MZArray withNSArray(aArray: NSArray);
-begin
-  if aArray.count > 0 then begin
-    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type((aArray[0] as MZType).type), aArray.count) as ^MonoObject);
-    for a in aArray index i do begin
-      var lInst := MZObject(aArray[i]):__instance;
-      elements[i] := lInst;
-    end;
-  end
-  else begin
-    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(MZMonoRuntime.sharedInstance.getCoreType('System.Object').type), 0) as ^MonoObject);
-  end;
-end;
-
 method MZArray.countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
 begin
   var c := count;
@@ -214,29 +217,7 @@ begin
   state^.mutationsPtr := nil;
 end;
 
-method MZObjectListInitFields(aInst: MZObjectList);
-begin
-  if MZObjectList.fSizeField = nil then begin
-    var lClass := mono_object_get_class(aInst.__instance);
-    MZObjectList.fSizeField := mono_class_get_field_from_name(lClass, '_size');
-    MZObjectList.fItemsField := mono_class_get_field_from_name(lClass, '_items');
-  end;
-  
-  aInst.fSize := ^Int32(^Byte(aInst.__instance) + mono_field_get_offset(MZObjectList.fSizeField));
-  aInst.fItems := ^^MonoArray(^Byte(aInst.__instance) + mono_field_get_offset(MZObjectList.fItemsField));
-end;
-
-method MZObjectListLoadArray(aInst: MZObjectList);
-begin
-  var lItems := aInst.fItems^;
-  aInst.fLastItems := lItems;
-  if lItems = nil then begin
-    aInst.fArray := nil;
-    exit;
-  end;
-  aInst.fArray := new MZArray withMonoInstance(^MonoObject(lItems));
-  aInst.fArray.type := aInst.type;
-end;
+{ MZObjectList }
 
 constructor MZObjectList withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
 begin
@@ -291,6 +272,30 @@ begin
   for i: Integer := 0 to count-1 do
     lTmp[i] := fArray[i];
   exit lTmp;
+end;
+
+method MZObjectListInitFields(aInst: MZObjectList);
+begin
+  if MZObjectList.fSizeField = nil then begin
+    var lClass := mono_object_get_class(aInst.__instance);
+    MZObjectList.fSizeField := mono_class_get_field_from_name(lClass, '_size');
+    MZObjectList.fItemsField := mono_class_get_field_from_name(lClass, '_items');
+  end;
+  
+  aInst.fSize := ^Int32(^Byte(aInst.__instance) + mono_field_get_offset(MZObjectList.fSizeField));
+  aInst.fItems := ^^MonoArray(^Byte(aInst.__instance) + mono_field_get_offset(MZObjectList.fItemsField));
+end;
+
+method MZObjectListLoadArray(aInst: MZObjectList);
+begin
+  var lItems := aInst.fItems^;
+  aInst.fLastItems := lItems;
+  if lItems = nil then begin
+    aInst.fArray := nil;
+    exit;
+  end;
+  aInst.fArray := new MZArray withMonoInstance(^MonoObject(lItems));
+  aInst.fArray.type := aInst.type;
 end;
 
 end.
