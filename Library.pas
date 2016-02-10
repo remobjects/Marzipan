@@ -29,6 +29,7 @@ type
   private
   public
     constructor withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
+    constructor withNSArray(aArray: NSArray);
     property &type: &Class := typeOf(MZObject);
     property elements: ^^MonoObject read ^^MonoObject(mono_array_addr_with_size(^MonoArray(__instance), sizeOf(^MonoObject), 0));
     property count: NSUInteger read mono_array_length(^MonoArray(__instance));
@@ -180,6 +181,20 @@ begin
     &type := aType;
   end;
   result := self;
+end;
+
+constructor MZArray withNSArray(aArray: NSArray);
+begin
+  if aArray.count > 0 then begin
+    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type((aArray[0] as MZType).type), aArray.count) as ^MonoObject);
+    for a in aArray index i do begin
+      var lInst := MZObject(aArray[i]):__instance;
+      elements[i] := lInst;
+    end;
+  end
+  else begin
+    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(MZMonoRuntime.sharedInstance.getCoreType('System.Object').type), 0) as ^MonoObject);
+  end;
 end;
 
 method MZArray.countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
