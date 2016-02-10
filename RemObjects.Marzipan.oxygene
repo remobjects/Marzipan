@@ -14,8 +14,6 @@
         <SDK>OS X</SDK>
         <CreateHeaderFile>True</CreateHeaderFile>
         <Name>RemObjects.Marzipan</Name>
-        <DefaultUses/>
-        <StartupClass/>
         <BundleIdentifier>com.remObjects.marzipan</BundleIdentifier>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -38,13 +36,13 @@
         <WarnOnCaseMismatch>True</WarnOnCaseMismatch>
     </PropertyGroup>
     <ItemGroup>
-        <Reference Include="CoreGraphics.fx"/>
-        <Reference Include="Foundation.fx"/>
-        <Reference Include="libmono-2.0.fx">
+        <Reference Include="CoreGraphics"/>
+        <Reference Include="Foundation"/>
+        <Reference Include="libmono-2.0">
             <HintPath>libmono-2.0\OS X\libmono-2.0.fx</HintPath>
         </Reference>
-        <Reference Include="rtl.fx"/>
-        <Reference Include="libNougat.fx"/>
+        <Reference Include="rtl"/>
+        <Reference Include="libNougat"/>
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Library.pas"/>
@@ -53,7 +51,7 @@
     <ItemGroup>
         <Folder Include="Properties\"/>
     </ItemGroup>
-    <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Oxygene\RemObjects.Oxygene.Nougat.targets"/>
+    <Import Project="$(MSBuildExtensionsPath)/RemObjects Software/Oxygene/RemObjects.Oxygene.Nougat.targets"/>
     <PropertyGroup>
         <PreBuildEvent/>
     </PropertyGroup>
