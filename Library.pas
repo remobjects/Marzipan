@@ -142,7 +142,7 @@ end;
 constructor MZArray withNSArray(aArray: NSArray);
 begin
   if aArray.count > 0 then begin
-    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type((aArray[0] as MZType).type), aArray.count) as ^MonoObject);
+    self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, (aArray[0] as MZObject).getClass(), aArray.count) as ^MonoObject);
     for a in aArray index i do begin
       var lInst := MZObject(aArray[i]):__instance;
       elements[i] := lInst;

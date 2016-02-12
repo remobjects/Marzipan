@@ -111,7 +111,7 @@ type
   public
     class method raiseException(aEx: ^MonoException);
     constructor withMonoInstance(aInstance: ^MonoObject);
-    method getType: ^MonoType;
+    method getClass: ^MonoClass;
     property __instance: ^MonoObject read fInstance write setInstance;
     class method getTypeCode: MZTypeCode; virtual;
     class method getType: MZType; virtual;
@@ -171,6 +171,10 @@ begin
     NSLog("Entering debug mode with options %s"#10, debug);
     mono_debug_init(MonoDebugFormat.MONO_DEBUG_FORMAT_MONO);
     mono_jit_parse_options(1, @debug);
+  end
+  else begin
+    var option: ^AnsiChar := ' -O=all';
+    mono_jit_parse_options(1, @option);
   end;
 end;
 
@@ -382,7 +386,7 @@ begin
   mono_gchandle_free(fHandle);
 end;
 
-method MZObject.getType: ^MonoType;
+method MZObject.getClass: ^MonoClass;
 begin
   exit mono_object_get_class(fInstance);
 end;
