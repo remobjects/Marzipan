@@ -79,8 +79,10 @@ begin
   Log('Resolving types');
   for each el in fSettings.Types do begin
     var lLib := fLibraries.SelectMany(a -> a.Types.Where(b -> (b.GenericParameters.Count = 0) and (b.FullName = el.Name))).ToArray; // Lets ignore those for a sec.
-    if lLib.Count = 0 then
-      raise new Exception('Type "'+el.Name+'" not found.');
+    if lLib.Count = 0 then begin
+      writeLn('Warning: Type "'+el.Name+'" not found.');
+      continue;
+    end;
     
     var lNewName := if not String.IsNullOrEmpty(el.TargetName) then el.TargetName else fSettings.Prefix+ lLib[0].Name;
     if lLib.Count = 0 then
