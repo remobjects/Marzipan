@@ -1,9 +1,9 @@
-﻿//  Import of libmono-2.0 ()
+﻿//  Import of libmono-2 ()
 //  Frameworks:
 //  Targets: x86_64
 //  Dep fx:rtl
-//  Dep libs:mono-2.0.1
-//  Platform:
+//  Dep libs:mono-2.0
+//  Platform: OS X
 namespace ;
 
 interface
