@@ -13,7 +13,7 @@
         <AllowUnsafeCode>False</AllowUnsafeCode>
         <ApplicationIcon>Properties\App.ico</ApplicationIcon>
         <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-        <TargetFrameworkVersion>v3.5</TargetFrameworkVersion>
+        <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
         <Name>Importer</Name>
     </PropertyGroup>
     <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -53,6 +53,7 @@
     <ItemGroup>
         <Reference Include="Mono.Cecil">
             <HintPath>Mono.Cecil.dll</HintPath>
+            <Private>True</Private>
         </Reference>
         <Reference Include="mscorlib"/>
         <Reference Include="System"/>
@@ -87,8 +88,14 @@
         <Folder Include="Properties\"/>
     </ItemGroup>
     <ItemGroup>
-        <Reference Include="RemObjects.CodeGenerator">
-            <HintPath>..\References\RemObjects.CodeGenerator.dll</HintPath>
+        <ProjectReference Include="..\CodeGen4\CodeGen4.Echoes.elements">
+            <Name>CodeGen4.Echoes</Name>
+            <HintPath>..\CodeGen4\bin\Debug\CodeGen4.dll</HintPath>
+            <Project>{2C3408F4-2270-4310-9A38-6A5296129576}</Project>
+            <Private>True</Private>
+        </ProjectReference>
+        <Reference Include="Echoes">
+            <Private>True</Private>
         </Reference>
     </ItemGroup>
     <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Echoes.targets"/>

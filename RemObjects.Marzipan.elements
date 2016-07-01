@@ -42,7 +42,7 @@
             <HintPath>libmono-2.0\OS X\libmono-2.0.fx</HintPath>
         </Reference>
         <Reference Include="rtl"/>
-        <Reference Include="libNougat"/>
+        <Reference Include="libToffee"/>
     </ItemGroup>
     <ItemGroup>
         <Compile Include="Library.pas"/>

@@ -16,7 +16,8 @@ implementation
 
 class method ConsoleApp.Main(args: array of String);
 begin
-  Console.WriteLine("RemObjects Marzipan Importer");
+  Console.WriteLine("RemObjects Marzipan Importer 2.0");
+  Console.WriteLine("Built with CodeGen4");
   Console.WriteLine;
   if length(args) <> 1 then begin
     Console.WriteLine('syntax: importsettings.xml');
