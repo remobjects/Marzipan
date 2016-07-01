@@ -21,7 +21,9 @@ type
     method WrapListObject(aVal: CGExpression; aType: CGTypeReference; aArray: Boolean): CGExpression;
     method WrapObject(aVal: CGExpression; aType: CGTypeReference): CGExpression;
     method SigTypeToString(aType: TypeReference): String;
+
     fSettings: ImporterSettings;
+    fCodeGenerator: CGCodeGenerator;
     fLibraries: List<ModuleDefinition> := new List<ModuleDefinition>;
     fTypes: Dictionary<TypeDefinition, String> := new Dictionary<TypeDefinition, String>;
     fImportNameMapping: Dictionary<String, String> := new Dictionary<String,String>;
@@ -39,7 +41,7 @@ type
     method GetMethodSignature(aSig: MethodDefinition): String;
     method IsObjectRef(aType: TypeReference): Boolean;
   public
-    constructor(aSettings: ImporterSettings);
+    constructor (aSettings: ImporterSettings; aCodeGenerator: CGCodeGenerator);
     method GetMonoType(aType: TypeReference): CGTypeReference;
     method GetMarzipanType(aType: TypeReference): CGTypeReference;
     event Log: Action<String> raise;
@@ -50,9 +52,10 @@ type
 
 implementation
 
-constructor Importer(aSettings: ImporterSettings);
+constructor Importer(aSettings: ImporterSettings; aCodeGenerator: CGCodeGenerator);
 begin
   fSettings := aSettings;
+  fCodeGenerator := aCodeGenerator;
   fImportNameMapping.Add('System.Object', 'MZObject');
   fImportNameMapping.Add('System.String', 'NSString');
   fImportNameMapping.Add('System.SByte', 'int8_t');
@@ -420,17 +423,27 @@ begin
   end;
 
   Log('Generating code');
-  var lGenerator: CGCodeGenerator;
-  case self.fSettings.OutputType of
-    OutputType.Nougat: lGenerator := new CGOxygeneCodeGenerator();
-  end;
 
-  Output := lGenerator.GenerateUnit(fUnit);
+  Output := fCodeGenerator.GenerateUnit(fUnit);
+  case fCodeGenerator type of
+    CGOxygeneCodeGenerator: Output := '{$HIDE W8}'+Environment.NewLine+Environment.NewLine+Output;
+    CGCSharpCodeGenerator: Output := '#hide W8'+Environment.NewLine+Environment.NewLine+Output;
+  end;
   
-  if Path.GetExtension(fSettings.OutputFilename) = '.pas' then
-    Output := '{$HIDE W8}'#13#10#13#10+Output;
+  var lFilename := Path.ChangeExtension(fSettings.OutputFilename, fCodeGenerator.defaultFileExtension);
+  File.WriteAllText(lFilename, Output);
+  Log('Wrote '+lFilename);
   
-  File.WriteAllText(fSettings.OutputFilename, Output);
+  // for ObjC, we gotta emit a second file. We probably should refatcor this logic into CG4
+  if fCodeGenerator is CGObjectiveCHCodeGenerator then begin
+    var lCodeGenerator2 := new CGObjectiveCMCodeGenerator();
+    Output := lCodeGenerator2.GenerateUnit(fUnit);
+
+    lFilename := Path.ChangeExtension(fSettings.OutputFilename, lCodeGenerator2.defaultFileExtension);
+    File.WriteAllText(lFilename, Output);
+    Log('Wrote '+lFilename);
+  end;
+    
 end;
 
 method Importer.GetMonoType(aType: TypeReference): CGTypeReference;

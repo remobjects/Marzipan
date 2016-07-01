@@ -4,32 +4,76 @@ interface
 
 uses
   System.IO,
-  System.Linq;
+  System.Linq,
+  RemObjects.CodeGen4;
 
 type
-  ConsoleApp = class
+  ConsoleApp = static class
+  private
+    method WriteSyntax;
   public
-    class method Main(args: array of String);
+    method Main(args: array of String);
   end;
 
 implementation
 
-class method ConsoleApp.Main(args: array of String);
+method ConsoleApp.WriteSyntax;
 begin
-  Console.WriteLine("RemObjects Marzipan Importer 2.0");
-  Console.WriteLine("Built with CodeGen4");
-  Console.WriteLine;
-  if length(args) <> 1 then begin
-    Console.WriteLine('syntax: importsettings.xml');
+  writeLn('syntax: MZImporter.exe importsettings.xml langauge');
+  writeLn();
+  writeLn('  where');
+  writeLn();
+  writeLn('  * importsettings.xml is the path to an XML file with your import settings');
+  writeLn();
+  writeLn('      See http://docs.elementscompiler.com/Tools/Marzipan for details.');
+  writeLn();
+  writeLn('  * language is one of the following:');
+  writeLn();
+  writeLn('    - oxygene');
+  writeLn('    - csharp');
+  writeLn('    - swift');
+  writeLn('    - objectivec');
+  writeLn();
+end;
+
+method ConsoleApp.Main(args: array of String);
+begin
+  writeLn("RemObjects Marzipan Importer 2.0");
+  writeLn("Built with CodeGen4");
+  writeLn();
+
+  if length(args) <> 2 then begin
+    WriteSyntax;
+    exit;
+  end;
+  
+  var lSettingsFile := args[0];
+  var lLanguage := args[1];
+  
+  var lCodeGenerator := case lLanguage:ToLower() of
+    'oxygene','pascal','pas': new CGOxygeneCodeGenerator();
+    'csharp','hydrogene','cs': new CGCSharpCodeGenerator(CGCSharpCodeGeneratorDialect.Hydrogene);
+    'swift','silver': new CGSwiftCodeGenerator(CGSwiftCodeGeneratorDialect.Silver);
+    'objc','objectivec','m': new CGObjectiveCHCodeGenerator();
+  end;
+  
+  if not assigned(lCodeGenerator) then begin
+    WriteSyntax;
+    exit;
+  end;
+  
+  if not File.Exists(lSettingsFile) then begin
+    writeLn('Import settings file '+Path.GetFileName(lSettingsFile)+' does not exist');
+    writeLn();
     exit;
   end;
   
   var x := new ImporterSettings;
-  x.LoadFromXml(args[0]);
+  x.LoadFromXml(lSettingsFile);
   Environment.CurrentDirectory := Path.GetDirectoryName(args[0]);
 
-  var lWorker := new Importer(x);
-  lWorker.Log += s->Console.WriteLine(s);
+  var lWorker := new Importer(x, lCodeGenerator);
+  lWorker.Log += s -> Console.WriteLine(s);
   lWorker.Run;
 end;
 
