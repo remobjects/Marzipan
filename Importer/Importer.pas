@@ -169,6 +169,7 @@ begin
       lVars.Add(lCGFieldDefinition);
       
       var lMeth := new CGMethodDefinition(meth.Name);
+      lMeth.Visibility := CGMemberVisibilityKind.Public;
       lMethodMap[meth] := lMeth;
       lMeth.ReturnType := GetMarzipanType(meth.ReturnType);
       if meth.IsConstructor then begin
