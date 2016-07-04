@@ -107,7 +107,9 @@ begin
   lImportsList.Add(new CGImport('mono.jit'));
   fUnit.Imports := lImportsList;
 
-  fUnit.FileName := if String.IsNullOrEmpty(fSettings.Namespace) then Path.GetFileNameWithoutExtension(fSettings.OutputFilename) else fSettings.Namespace;
+  fUnit.Namespace := new CGNamespaceReference(if String.IsNullOrEmpty(fSettings.Namespace) then Path.GetFileNameWithoutExtension(fSettings.OutputFilename) else fSettings.Namespace);
+  fUnit.FileName := Path.GetFileNameWithoutExtension(fSettings.OutputFilename);
+
   var lVars := new List<CGMemberDefinition>;
   var lMethods := new List<CGMemberDefinition>;
   
