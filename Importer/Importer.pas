@@ -94,7 +94,7 @@ begin
     else if (not lLib[0].IsValueType) then
       fTypes.Add(lLib[0], lNewName);
     Log('Adding type '+lNewName+' from '+lLib[0].FullName);
-    if (not lLib[0].IsValueType) then
+    if (not lLib[0].IsValueType) and (not fImportNameMapping.ContainsKey(lLib[0].FullName)) then
       fImportNameMapping.Add(lLib[0].FullName, lNewName);
   end;
   fUnit := new CGCodeUnit();
@@ -410,7 +410,7 @@ begin
   end;
   var lStart := fEnumTypes.Count;
 
-  for each el in fValueTypes index n do begin
+  for each el in fValueTypes.ToList() index n do begin
     var lTypeDef := new CGStructTypeDefinition(fImportNameMapping[el.FullName]);
     lTypeDef.Comment := new CGCommentStatement('Import of '+el.FullName+' from '+el.Scope.Name);
     lTypeDef.Visibility := CGTypeVisibilityKind.Public;
@@ -476,14 +476,16 @@ begin
   if lType.IsEnum then begin
     if not fEnumTypes.Contains(lType) then begin
       fEnumTypes.Add(lType);
-      fImportNameMapping.Add(lType.FullName, lType.Name);
+      if not fImportNameMapping.ContainsKey(lType.FullName) then
+        fImportNameMapping.Add(lType.FullName, lType.Name);
     end;
     exit new CGNamedTypeReference(lType.Name); 
   end;
   if lType.IsValueType and not (lType.IsGenericInstance) and (lType.GenericParameters.Count = 0) then begin
     if not fValueTypes.Contains(lType) Then begin
       fValueTypes.Add(lType);
-      fImportNameMapping.Add(lType.FullName, lType.Name);
+      if not fImportNameMapping.ContainsKey(lType.FullName) then
+        fImportNameMapping.Add(lType.FullName, lType.Name);
     end;
     exit new CGNamedTypeReference(lType.Name);
   end;
