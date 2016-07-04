@@ -161,7 +161,7 @@ begin
         else 
           lParamType := GetMonoType(elpar.ParameterType);
 
-        var lCGParameterDefinition: CGParameterDefinition := new CGParameterDefinition('__instance', lParamType);
+        var lCGParameterDefinition: CGParameterDefinition := new CGParameterDefinition(elpar.Name, lParamType);
         lMonoSig.Parameters.Add(lCGParameterDefinition);  
       end;
       lMonoSig.Parameters.Add(new CGParameterDefinition('exception', new CGPointerTypeReference(new CGPointerTypeReference(new CGNamedTypeReference('MonoException')))));
