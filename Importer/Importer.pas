@@ -241,7 +241,8 @@ begin
         var lParamType: CGTypeReference;
         var lParamModifier : CGParameterModifierKind;
         var lPTar: TypeReference := meth.Parameters[i].ParameterType;
-        if lPTar.IsByReference then begin
+        var lIsByReference := lPTar.IsByReference;
+        if lIsByReference then begin
           lPTar:= lPTar.GetElementType;
           lParamType := GetMarzipanType(lPTar);
           lParamModifier := CGParameterModifierKind.Var;
@@ -249,13 +250,13 @@ begin
           lParamType := GetMarzipanType(lPTar);
 
         var lPar := new CGParameterDefinition(lParamName, lParamType);
-        if lPTar.IsByReference then lPar.Modifier := lParamModifier;
+        if lIsByReference then lPar.Modifier := lParamModifier;
 
         lMeth.Parameters.Add(lPar);
 
         if lPTar.FullName = 'System.String' then begin
           if lPar.Modifier = CGParameterModifierKind.Var then begin
-            lMeth.Statements.Add(new CGVariableDeclarationStatement('par'+i, GetMonoType(lPTar),
+            lCGBeginEndBlockStatement.Statements.Add(new CGVariableDeclarationStatement('par'+i, GetMonoType(lPTar),
                                                                                   new CGMethodCallExpression(new CGNamedIdentifierExpression('MZString'), 'MonoStringWithNSString', [new CGCallParameter(new CGNamedIdentifierExpression(lPar.Name))]) ));
             lCall.Parameters.Add(new CGCallParameter(new CGUnaryOperatorExpression(new CGNamedIdentifierExpression('par'+i), CGUnaryOperatorKind.AddressOf)));
             if lAfterCall = nil then begin
@@ -272,7 +273,7 @@ begin
           if lPar.Modifier = CGParameterModifierKind.Var then begin
             var lTempExpr := new CGIfThenElseExpression(new CGUnaryOperatorExpression(new CGAssignedExpression(new CGNamedIdentifierExpression(lPar.Name)), CGUnaryOperatorKind.Not), new CGNilExpression(), new CGMethodCallExpression(new CGNamedIdentifierExpression(lPar.Name), '__instance'));
 
-            lMeth.Statements.Add(new CGVariableDeclarationStatement('par'+i, GetMonoType(lPTar), new CGTypeCastExpression(lTempExpr, GetMonoType(lPTar)) ));
+            lCGBeginEndBlockStatement.Statements.Add(new CGVariableDeclarationStatement('par'+i, GetMonoType(lPTar), new CGTypeCastExpression(lTempExpr, GetMonoType(lPTar)) ));
 
             lCall.Parameters.Add(new CGCallParameter(new CGUnaryOperatorExpression(new CGNamedIdentifierExpression('par'+i), CGUnaryOperatorKind.AddressOf)));
             if lAfterCall = nil then begin
