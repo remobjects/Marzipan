@@ -459,20 +459,20 @@ begin
   case aType.FullName of
     'System.String': exit new CGPointerTypeReference(new CGNamedTypeReference('MonoString'));
     'System.Object': exit new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'));
-    'System.Char': new CGNamedTypeReference('Char');
-    'System.Single': new CGNamedTypeReference('Single');
-    'System.Double': new CGNamedTypeReference('Double');
-    'System.Boolean': new CGNamedTypeReference('Boolean');
-    'System.SByte': new CGNamedTypeReference('int8_t');
-    'System.Byte': new CGNamedTypeReference('uint8_t');
-    'System.Int16': new CGNamedTypeReference('int16_t');
-    'System.UInt16': new CGNamedTypeReference('uint16_t');
-    'System.Int32': new CGNamedTypeReference('int32_t');
-    'System.UInt32': new CGNamedTypeReference('uint32_t');
-    'System.Int64': new CGNamedTypeReference('int64_t');
-    'System.UInt64': new CGNamedTypeReference('uint64_t');
-    'System.IntPtr': new CGNamedTypeReference('intptr_t');
-    'System.UIntPtr': new CGNamedTypeReference('uintptr_t');
+    'System.Char': exit new CGNamedTypeReference('Char');
+    'System.Single': exit new CGNamedTypeReference('Single');
+    'System.Double': exit new CGNamedTypeReference('Double');
+    'System.Boolean': exit new CGNamedTypeReference('Boolean');
+    'System.SByte': exit new CGNamedTypeReference('int8_t');
+    'System.Byte': exit new CGNamedTypeReference('uint8_t');
+    'System.Int16': exit new CGNamedTypeReference('int16_t');
+    'System.UInt16': exit new CGNamedTypeReference('uint16_t');
+    'System.Int32': exit new CGNamedTypeReference('int32_t');
+    'System.UInt32': exit new CGNamedTypeReference('uint32_t');
+    'System.Int64': exit new CGNamedTypeReference('int64_t');
+    'System.UInt64': exit new CGNamedTypeReference('uint64_t');
+    'System.IntPtr': exit new CGNamedTypeReference('intptr_t');
+    'System.UIntPtr': exit new CGNamedTypeReference('uintptr_t');
   end;
   var lType := aType.Resolve;
   if lType.IsEnum then begin
