@@ -233,7 +233,7 @@ begin
           lCall.Parameters.Add(new CGCallParameter(new CGNamedIdentifierExpression('inst'), ''));
       end;
 
-      lMeth.Statements.Add(lCGBeginEndBlockStatement);
+      //lMeth.Statements.Add(lCGBeginEndBlockStatement);
 
       var lAfterCall: LinkedList<CGStatement>;
       for i: Integer := 0 to meth.Parameters.Count -1 do begin
@@ -301,6 +301,9 @@ begin
       if lHasResult then begin
         var lCGAssignmentStatement := new CGAssignmentStatement(new CGNamedIdentifierExpression('res'), lCall);
         lCGBeginEndBlockStatement.Statements.Add(lCGAssignmentStatement);
+      end
+      else begin
+         lCGBeginEndBlockStatement.Statements.Add(lCall);
       end;
       
       for each elz in lAfterCall do
@@ -327,6 +330,8 @@ begin
           lCGBeginEndBlockStatement.Statements.Add(new CGReturnStatement(WrapObject(new CGNamedIdentifierExpression('res'), GetMarzipanType(meth.ReturnType))))
         else
           lCGBeginEndBlockStatement.Statements.Add(new CGReturnStatement(new CGNamedIdentifierExpression('res')));
+
+      lMeth.Statements.Add(lCGBeginEndBlockStatement);
     end;
 
     var lProperties := new List<CGPropertyDefinition>;
