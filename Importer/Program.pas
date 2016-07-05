@@ -52,7 +52,7 @@ begin
   
   var lCodeGenerator := case lLanguage:ToLower() of
     'oxygene','pascal','pas': new CGOxygeneCodeGenerator();
-    'csharp','hydrogene','cs': new CGCSharpCodeGenerator(CGCSharpCodeGeneratorDialect.Hydrogene);
+    'c#','csharp','hydrogene','cs': new CGCSharpCodeGenerator(CGCSharpCodeGeneratorDialect.Hydrogene);
     'swift','silver': new CGSwiftCodeGenerator(CGSwiftCodeGeneratorDialect.Silver);
     'objc','objectivec','m': new CGObjectiveCHCodeGenerator();
   end;

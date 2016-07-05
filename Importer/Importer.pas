@@ -437,7 +437,7 @@ begin
   Output := fCodeGenerator.GenerateUnit(fUnit);
   case fCodeGenerator type of
     CGOxygeneCodeGenerator: Output := '{$HIDE W8}'+Environment.NewLine+Environment.NewLine+Output;
-    CGCSharpCodeGenerator: Output := '#hide W8'+Environment.NewLine+Environment.NewLine+Output;
+    CGCSharpCodeGenerator: Output := '#pragma hide W8'+Environment.NewLine+Environment.NewLine+Output;
   end;
   
   var lFilename := Path.ChangeExtension(fSettings.OutputFilename, fCodeGenerator.defaultFileExtension);
