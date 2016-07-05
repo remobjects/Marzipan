@@ -420,7 +420,8 @@ begin
         new CGFieldDefinition(lConst.Name, GetMonoType(lConst.FieldType)));
     end;
 
-    fUnit.Types.Insert(n + lStart, lTypeDef);
+    if not fUnit.Types.Contains(lTypeDef) then
+      fUnit.Types.Insert(n + lStart, lTypeDef);
     
   end;
 
