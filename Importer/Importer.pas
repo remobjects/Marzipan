@@ -374,7 +374,7 @@ begin
     lFType.Attributes.Add(new CGAttribute(new CGNamedTypeReference('Lazy')));
     lFType.Type := new CGNamedTypeReference('MZType');
 
-    var lCall := new CGMethodCallExpression(new CGMethodCallExpression(new CGNamedIdentifierExpression('MZMonoRuntime'), 'sharedInstance'), 'getType', [new CGCallParameter(new CGStringLiteralExpression())]);
+    var lCall := new CGMethodCallExpression(new CGMethodCallExpression(new CGNamedIdentifierExpression('MZMonoRuntime'), 'sharedInstance'), 'getType', [new CGCallParameter(new CGStringLiteralExpression(el.Key.FullName+', '+ModuleDefinition(el.Key.Scope).Assembly.Name.Name))]);
     
     lFType.Initializer := lCall;
 
