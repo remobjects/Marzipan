@@ -424,7 +424,7 @@ begin
     
     for each lConst in el.Fields.Where(a->a.IsStatic = false) do begin
       lTypeDef.Members.Add(
-        new CGFieldDefinition(lConst.Name, GetMonoType(lConst.FieldType)));
+        new CGFieldDefinition(lConst.Name, GetMonoType(lConst.FieldType), Visibility := CGMemberVisibilityKind.Public));
     end;
 
     if not fUnit.Types.Contains(lTypeDef) then
