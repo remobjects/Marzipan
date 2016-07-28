@@ -115,7 +115,7 @@ begin
   
   var lNames: HashSet<String> := new HashSet<String>;
   var lMethodMap: Dictionary<MethodDefinition, CGMethodDefinition> := new Dictionary<MethodDefinition,CGMethodDefinition>;
-  for each el in fTypes do begin
+  for each el in fTypes.OrderBy(t -> t.Key.FullName) do begin
     Log('Generating type '+el.Key.FullName);
     lMethodMap.Clear;
 
@@ -133,7 +133,7 @@ begin
     fUnit.Types.Add(lType);
     lNames.Clear;
     lMethodMap.Clear;
-    for each meth in el.Key.Methods index n do begin
+    for each meth in el.Key.Methods.OrderBy(m -> GetMethodSignature(m)) index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
       if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
       if meth.Parameters.Any(a->a.ParameterType.IsGenericInstance and a.ParameterType.IsValueType) then continue;
@@ -243,7 +243,7 @@ begin
         var lPTar: TypeReference := meth.Parameters[i].ParameterType;
         var lIsByReference := lPTar.IsByReference;
         if lIsByReference then begin
-          lPTar:= lPTar.GetElementType;
+          lPTar := ByReferenceType(lPTar).ElementType;
           lParamType := GetMarzipanType(lPTar);
           lParamModifier := CGParameterModifierKind.Var;
         end else
@@ -281,9 +281,12 @@ begin
             end;
             var lArr: Boolean;
             if IsListObjectRef(lPTar, out lArr) then
-              lAfterCall.AddLast(new CGAssignmentStatement(new CGNamedIdentifierExpression(lPar.Name), WrapListObject(new CGNamedIdentifierExpression('par'+i), GetMarzipanType(
-              if lpt is GenericInstanceType then
-              GenericInstanceType(lPTar).GenericArguments[0] else lPTar.GetElementType), lArr)))
+              lAfterCall.AddLast(new CGAssignmentStatement(new CGNamedIdentifierExpression(lPar.Name),
+                                                           WrapListObject(new CGNamedIdentifierExpression('par'+i),
+                                                                          GetMarzipanType(if lpt is GenericInstanceType then
+                                                                                            GenericInstanceType(lPTar).GenericArguments[0]
+                                                                                          else
+                                                                                            lPTar.GetElementType), lArr)))
             else 
               lAfterCall.AddLast(new CGAssignmentStatement(new CGNamedIdentifierExpression(lPar.Name), WrapObject(new CGNamedIdentifierExpression('par'+i), lPar.Type)));
           end else begin
@@ -337,7 +340,7 @@ begin
 
     var lProperties := new List<CGPropertyDefinition>;
 
-    for each prop in el.Key.Properties do begin
+    for each prop in el.Key.Properties.OrderBy(p -> p.Name) do begin
       if not (((prop.GetMethod <> nil) and (prop.GetMethod.IsPublic)) or ((prop.SetMethod <> nil) and (prop.SetMethod.IsPublic)))then continue;
       var lProp := new CGPropertyDefinition(prop.Name);
       if coalesce(prop.GetMethod, prop.SetMethod).IsStatic then
@@ -519,7 +522,6 @@ begin
   if self.fImportNameMapping.TryGetValue(aType.FullName, out lRes) then
     exit new CGNamedTypeReference(lRes);
   exit new CGNamedTypeReference('MZObject');
-
 end;
 
 method Importer.Resolve(fullName: String): AssemblyDefinition;
@@ -598,7 +600,7 @@ begin
   case aType.MetadataType of
     MetadataType.Array: exit SigTypeToString(aType.GetElementType)+'[]';
     MetadataType.Boolean: exit 'bool';
-    MetadataType.ByReference: exit SigTypeToString(aType.GetElementType)+'&';
+    MetadataType.ByReference: exit SigTypeToString(ByReferenceType(aType).ElementType)+'&';
     MetadataType.Byte: exit 'byte';
     MetadataType.Int16: exit 'short';
     MetadataType.Int32: exit 'int';
