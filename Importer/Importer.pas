@@ -263,7 +263,8 @@ begin
               lAfterCall := new LinkedList<CGStatement>;
             end;
             lAfterCall.AddLast(new CGAssignmentStatement(new CGNamedIdentifierExpression(lPar.Name), WrapObject(new CGNamedIdentifierExpression('par'+i), lPar.Type)));
-          end else begin
+          end
+          else begin
             lCall.Parameters.Add(new CGCallParameter(new CGMethodCallExpression(
                                   new CGTypeReferenceExpression(new CGNamedTypeReference('MZString')), 'MonoStringWithNSString', 
                                  [new CGCallParameter(new CGNamedIdentifierExpression(lPar.Name))])));
@@ -283,7 +284,7 @@ begin
             if IsListObjectRef(lPTar, out lArr) then
               lAfterCall.AddLast(new CGAssignmentStatement(new CGNamedIdentifierExpression(lPar.Name),
                                                            WrapListObject(new CGNamedIdentifierExpression('par'+i),
-                                                                          GetMarzipanType(if lpt is GenericInstanceType then
+                                                                          GetMarzipanType(if lPTar is GenericInstanceType then
                                                                                             GenericInstanceType(lPTar).GenericArguments[0]
                                                                                           else
                                                                                             lPTar.GetElementType), lArr)))
