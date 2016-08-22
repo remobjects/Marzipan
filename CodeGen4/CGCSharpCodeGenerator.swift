@@ -13,7 +13,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		super.init()
 		
 		// current as of Elements 8.1 and C# 6.0
-		keywords = ["__arglist", "__aspect", "__autoreleasepool", "__block", "__inline", "__makeref", "__mapped", 
+		keywords = ["__arglist", "__aspect", "__autoreleasepool", "__block", "__inline", "__extension", "__makeref", "__mapped", 
 					"__reftype", "__refvalue", "__selector", "__strong", "__unretained", "__weak", 
 					"abstract", "add", "as", "ascending", "assembly", "async", "await", "base", "bool", "break", "by", "byte", 
 					"case", "catch", "char", "checked", "class", "const", "continue", "decimal", "default", "delegate", "descending", "do", "double", "dynamic", 
@@ -814,12 +814,16 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateAliasType(_ type: CGTypeAliasDefinition) {
-
+		Append("using ")
+		generateIdentifier(type.Name)
+		Append(" = ")
+		generateTypeReference(type.ActualType)
+		AppendLine(";")
 	}
 	
 	override func generateBlockType(_ block: CGBlockTypeDefinition) {
 		if block.IsPlainFunctionPointer {
-			Append("[FunctionPointer ]")
+			Append("[FunctionPointer] ")
 		}
 		Append("delegate ")
 		if let returnType = block.ReturnType {
@@ -838,7 +842,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	
 	override func generateInlineBlockTypeReference(_ type: CGInlineBlockTypeReference, ignoreNullability: Boolean = false) {
 		if type.Block.IsPlainFunctionPointer {
-			Append("[FunctionPointer ]")
+			Append("[FunctionPointer] ")
 		}
 		Append("delegate ")
 		if let returnType = type.Block.ReturnType {
@@ -865,7 +869,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		AppendLine()
 		AppendLine("{")
 		incIndent()
-		helpGenerateCommaSeparatedList(type.Members) {m in
+		helpGenerateCommaSeparatedList(type.Members, separator: { self.AppendLine(",") } ) {m in
 			if let member = m as? CGEnumValueDefinition {
 				self.generateIdentifier(member.Name)
 				if let value = member.Value {
