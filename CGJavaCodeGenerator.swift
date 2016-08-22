@@ -2,6 +2,11 @@
 import Sugar.Collections
 import Sugar.Linq
 
+public enum CGJavaCodeGeneratorDialect {
+	case Standard
+	case Iodine
+}
+
 public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 
 	public init() {
@@ -13,6 +18,13 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 					"enum", "instanceof", "return", "transient", "catch", "extends", "int", "short", "try", "char", "final", "interface", "static",
 					"void", "class", "finally", "long", "strictfp", "volatile", "const", "float", "native", "super", "while"].ToList() as! List<String>
 	}
+
+	public var Dialect: CGJavaCodeGeneratorDialect = .Standard
+
+	public convenience init(dialect: CGJavaCodeGeneratorDialect) {
+		init()
+		Dialect = dialect
+	}	
 
 	public override var defaultFileExtension: String { return "java" }
 
@@ -750,7 +762,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		javaGenerateDefinitionParameters(method.Parameters)
 		Append(")")
 
-		if type is CGInterfaceTypeDefinition || method.Virtuality == CGMemberVirtualityKind.Abstract || method.External {
+		if type is CGInterfaceTypeDefinition || method.Virtuality == CGMemberVirtualityKind.Abstract || method.External || definitionOnly {
 			AppendLine(";")
 			return
 		}
@@ -776,7 +788,13 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		if ctor.Parameters.Count > 0 {
 			javaGenerateDefinitionParameters(ctor.Parameters)
 		}
-			AppendLine(")")
+		AppendLine(")")
+
+		if definitionOnly {
+			AppendLine(";")
+			return
+		}
+
 		AppendLine("{")
 		incIndent()
 		generateStatements(ctor.LocalVariables)
@@ -815,6 +833,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		javaGenerateMemberTypeVisibilityPrefix(property.Visibility)
 		javaGenerateStaticPrefix(property.Static && !type.Static)
 
+		Append("/* property */ ")
 		if let type = property.`Type` {
 			generateTypeReference(type)
 			Append(" ")
@@ -827,7 +846,9 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		} else {
 			generateIdentifier(property.Name)
 		}
-		if let params = property.Parameters where params.Count > 0 {
+		AppendLine(";")
+		
+		/*if let params = property.Parameters where params.Count > 0 {
 
 			Append("[")
 			javaGenerateDefinitionParameters(params)
@@ -885,7 +906,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 				generateExpression(value)
 			}
 			AppendLine("")
-		}
+		}*/
 	}
 
 	override func generateEventDefinition(_ event: CGEventDefinition, type: CGTypeDefinition) {
