@@ -2,12 +2,19 @@
 import Sugar.Collections
 import Sugar.Linq
 
-public enum CGOxygeneCodeGeneratorStyle {
-	case Standard
-	case Unified
-}
-
 public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
+
+	public enum CGOxygeneCodeGeneratorStyle {
+		case Standard
+		case Unified
+	}
+	
+	public enum CGOxygeneStringQuoteStyle {
+		case Single
+		case Double
+		case SmartSingle
+		case SmartDouble
+	}
 
 	public init() {
 		super.init()
@@ -39,10 +46,19 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 	}
 
 	public var Style: CGOxygeneCodeGeneratorStyle = .Standard
+	public var QuoteStyle: CGOxygeneStringQuoteStyle = .SmartSingle
+	
+	override var isUnified: Boolean { return Style == .Unified } 
 
 	public convenience init(style: CGOxygeneCodeGeneratorStyle) {
 		init()
 		Style = style
+	}	
+
+	public convenience init(style: CGOxygeneCodeGeneratorStyle, quoteStyle: CGOxygeneStringQuoteStyle) {
+		init()
+		Style = style
+		QuoteStyle = quoteStyle
 	}	
 
 	override func generateHeader() {
@@ -58,7 +74,7 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 	}
 	
 	override func generateGlobals() {
-		if let globals = currentUnit.Globals where globals.Count > 0{
+		if let globals = currentUnit.Globals, globals.Count > 0{
 			AppendLine("{$GLOBALS ON}")
 			AppendLine()
 		}
@@ -200,7 +216,7 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 	}
 
 	override func generateUnaryOperatorExpression(_ expression: CGUnaryOperatorExpression) {
-		if let `operator` = expression.Operator where `operator` == .ForceUnwrapNullable {
+		if let `operator` = expression.Operator, `operator` == .ForceUnwrapNullable {
 			generateExpression(expression.Value)
 			Append(" as not nullable")
 		} else {
@@ -299,7 +315,7 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 	override func generateNewInstanceExpression(_ expression: CGNewInstanceExpression) {
 		Append("new ")
 		generateExpression(expression.`Type`, ignoreNullability: true)
-		if let bounds = expression.ArrayBounds where bounds.Count > 0 {
+		if let bounds = expression.ArrayBounds, bounds.Count > 0 {
 			Append("[")
 			helpGenerateCommaSeparatedList(bounds) { boundExpression in 
 				self.generateExpression(boundExpression)
@@ -316,6 +332,19 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 		}
 	}
 	
+	override func generateStringLiteralExpression(_ expression: CGStringLiteralExpression) {
+		let SINGLE: Char = "'"
+		let DOUBLE: Char = "\""  
+		let quoteChar: Char
+		switch QuoteStyle {
+			case .Single: quoteChar = SINGLE
+			case .Double: quoteChar = DOUBLE
+			case .SmartSingle: quoteChar = expression.Value.Contains(SINGLE) ? DOUBLE : SINGLE
+			case .SmartDouble: quoteChar = expression.Value.Contains(DOUBLE) ? SINGLE : DOUBLE
+		}	
+		Append(pascalEscapeCharactersInStringLiteral(expression.Value, quoteChar: quoteChar))
+	}
+
 	//
 	// Type Definitions
 	//
@@ -360,11 +389,11 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 		} else {
 			Append("block(")
 		}
-		if let parameters = block.Parameters where parameters.Count > 0 {
+		if let parameters = block.Parameters, parameters.Count > 0 {
 			pascalGenerateDefinitionParameters(parameters)
 		}
 		Append(")")
-		if let returnType = block.ReturnType where !returnType.IsVoid {
+		if let returnType = block.ReturnType, !returnType.IsVoid {
 			Append(": ")
 			generateTypeReference(returnType)
 		}
@@ -403,7 +432,7 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 		}
 	}
 	
-	override func pascalGenerateConstructorHeader(_ ctor: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean) {
+	override func pascalGenerateConstructorHeader(_ ctor: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean, includeVisibility: Boolean = false) {
 		if ctor.Static {
 			Append("class ")
 		}
@@ -417,7 +446,7 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 			Append(" ")
 			Append(ctor.Name)
 		}
-		pascalGenerateSecondHalfOfMethodHeader(ctor, implementation: implementation)
+		pascalGenerateSecondHalfOfMethodHeader(ctor, implementation: implementation, includeVisibility: includeVisibility)
 	}
 	
 	internal func pascalGenerateFinalizerHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, implementation: Boolean) {
@@ -439,6 +468,9 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 
 	override func generateFinalizerDefinition(_ finalizer: CGFinalizerDefinition, type: CGTypeDefinition) {
 		pascalGenerateFinalizerHeader(finalizer, type: type, implementation: false)
+		if isUnified {
+			pascalGenerateMethodBody(finalizer, type: type)
+		}
 	}
 
 	override func pascalGenerateFinalizerImplementation(_ finalizer: CGFinalizerDefinition, type: CGTypeDefinition) {
@@ -496,9 +528,9 @@ public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 	
 	
 	func pascalGeneratePrefixForNullability(_ type: CGTypeReference) {
-		if (type.Nullability == CGTypeNullabilityKind.NullableUnwrapped && type.DefaultNullability == CGTypeNullabilityKind.NotNullable) || type.Nullability == CGTypeNullabilityKind.NullableNotUnwrapped {
+		if (type.Nullability == CGTypeNullabilityKind.NullableUnwrapped && (type.DefaultNullability == CGTypeNullabilityKind.NotNullable || type.DefaultNullability == CGTypeNullabilityKind.Unknown)) || type.Nullability == CGTypeNullabilityKind.NullableNotUnwrapped {
 			Append("nullable ")
-		} else if type.Nullability == CGTypeNullabilityKind.NotNullable && (type.DefaultNullability == CGTypeNullabilityKind.NullableUnwrapped || type.DefaultNullability == CGTypeNullabilityKind.NullableNotUnwrapped) {
+		} else if type.Nullability == CGTypeNullabilityKind.NotNullable && (type.DefaultNullability == CGTypeNullabilityKind.NullableUnwrapped || type.DefaultNullability == CGTypeNullabilityKind.NullableNotUnwrapped || type.DefaultNullability == CGTypeNullabilityKind.Unknown) {
 			Append("not nullable ")
 		}
 	}

@@ -1,5 +1,6 @@
 ﻿import Sugar
 import Sugar.Collections
+import Sugar.Linq
 
 //
 // Abstract base implementation for all Pascal-style languages (Oxygene, Delphi)
@@ -26,6 +27,8 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		}
 		return name
 	}
+	
+	internal var isUnified: Boolean { return false } 
 
 	//
 	// Pascal Special for interface/implementation separation
@@ -35,9 +38,13 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		if !definitionOnly {
 			generateHeader()
 			generateDirectives()
-			AppendLine("interface")
-			AppendLine()
-			pascalGenerateImports(currentUnit.Imports)
+			if !isUnified {
+				AppendLine("interface")
+				AppendLine()
+				pascalGenerateImports(currentUnit.Imports)
+			} else {
+				pascalGenerateImports(currentUnit.Imports.Concat(currentUnit.ImplementationImports).ToList())
+			}
 			generateGlobals()
 		}
 		if currentUnit.Types.Count > 0 {
@@ -46,14 +53,14 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			generateTypeDefinitions()
 			decIndent()
 		}
-		if !definitionOnly {
+		if !definitionOnly && !isUnified {
 			AppendLine("implementation")
 			AppendLine()
 			pascalGenerateImports(currentUnit.ImplementationImports)
 			pascalGenerateTypeImplementations()
 			pascalGenerateGlobalImplementations()
-			generateFooter()	
 		}	
+		generateFooter()	
 	}
 	
 	final func pascalGenerateTypeImplementations() {
@@ -270,7 +277,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		generateStatementsSkippingOuterBeginEndBlock(statement.Statements)
 		decIndent()
 		Append("until ")
-		if let notCondition = statement.Condition as? CGUnaryOperatorExpression where notCondition.Operator == CGUnaryOperatorKind.Not {
+		if let notCondition = statement.Condition as? CGUnaryOperatorExpression, notCondition.Operator == CGUnaryOperatorKind.Not {
 			generateExpression(notCondition.Value)
 		} else {
 			generateExpression(CGUnaryOperatorExpression.NotExpression(statement.Condition))
@@ -302,7 +309,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			generateStatementTerminator()
 			decIndent()
 		}
-		if let defaultStatements = statement.DefaultCase where defaultStatements.Count > 0 {
+		if let defaultStatements = statement.DefaultCase, defaultStatements.Count > 0 {
 			AppendLine("else begin")
 			incIndent()
 			generateStatementsSkippingOuterBeginEndBlock(defaultStatements)
@@ -329,16 +336,16 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 
 	override func generateTryFinallyCatchStatement(_ statement: CGTryFinallyCatchStatement) {
 		//todo: override for Oxygene to get rid of the double try, once tested
-		if let finallyStatements = statement.FinallyStatements where finallyStatements.Count > 0 {
+		if let finallyStatements = statement.FinallyStatements, finallyStatements.Count > 0 {
 			AppendLine("try")
 			incIndent()
 		}
-		if let catchBlocks = statement.CatchBlocks where catchBlocks.Count > 0 {
+		if let catchBlocks = statement.CatchBlocks, catchBlocks.Count > 0 {
 			AppendLine("try")
 			incIndent()
 		}
 		generateStatements(statement.Statements)
-		if let finallyStatements = statement.FinallyStatements where finallyStatements.Count > 0 {
+		if let finallyStatements = statement.FinallyStatements, finallyStatements.Count > 0 {
 			decIndent()
 			AppendLine("finally")
 			incIndent()
@@ -347,7 +354,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			Append("end")
 			generateStatementTerminator()
 		}
-		if let catchBlocks = statement.CatchBlocks where catchBlocks.Count > 0 {
+		if let catchBlocks = statement.CatchBlocks, catchBlocks.Count > 0 {
 			decIndent()
 			AppendLine("except")
 			incIndent()
@@ -700,7 +707,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	}
 
 	func pascalGenerateGenericParameters(_ parameters: List<CGGenericParameterDefinition>) {
-		if let parameters = parameters where parameters.Count > 0 {
+		if let parameters = parameters, parameters.Count > 0 {
 			Append("<")
 			helpGenerateCommaSeparatedList(parameters) { param in
 				if let variance = param.Variance {
@@ -716,12 +723,12 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	}
 
 	func pascalGenerateGenericConstraints(_ parameters: List<CGGenericParameterDefinition>?, needSemicolon: Boolean = false) {
-		if let parameters = parameters where parameters.Count > 0 {
+		if let parameters = parameters, parameters.Count > 0 {
 			var needsWhere = true
 			helpGenerateCommaSeparatedList(parameters) { param in
-				if let constraints = param.Constraints where constraints.Count > 0 {
+				if let constraints = param.Constraints, constraints.Count > 0 {
 					if needsWhere {
-						self.Append(" where ")
+						self.Append(", ")
 						needsWhere = false
 					} else {
 						self.Append(", ")
@@ -813,17 +820,45 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	override func generatePropertyAccessExpression(_ property: CGPropertyAccessExpression) {
 		let needsEscape = pascalGenerateCallSiteForExpression(property)
 		generateIdentifier(property.Name, escaped: needsEscape)
-		if let params = property.Parameters where params.Count > 0 {
+		if let params = property.Parameters, params.Count > 0 {
 			Append("[")
 			pascalGenerateCallParameters(property.Parameters)
 			Append("]")
 		}
 	}
 
+	internal func pascalEscapeCharactersInStringLiteral(_ string: String, quoteChar: Char) -> String {
+		let result = StringBuilder()
+		let len = string.Length
+		var inQuotes = false
+		for i in 0 ..< len {
+			let ch = string[i]
+			switch ch as! UInt16 {
+				case 32...127:
+					if ch == quoteChar {
+						fallthrough
+					}
+					if !inQuotes {
+						result.Append(quoteChar)
+						inQuotes = true
+					}
+					result.Append(ch)
+				default:
+					if inQuotes {
+						result.Append(quoteChar)
+						inQuotes = false
+					}
+					result.Append("#\(ch  as! UInt32)")
+			}
+		}
+		if inQuotes {
+			result.Append(quoteChar)
+		}
+		return result.ToString()
+	}
+	
 	override func generateStringLiteralExpression(_ expression: CGStringLiteralExpression) {
-		let escapedString = expression.Value.Replace("'", "''")
-		//todo: this is incomplete, we need to escape any invalid chars
-		Append("'\(escapedString)'")
+		Append(pascalEscapeCharactersInStringLiteral(expression.Value, quoteChar: "'"))
 	}
 
 	override func generateCharacterLiteralExpression(_ expression: CGCharacterLiteralExpression) {
@@ -871,7 +906,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	override func generateAttribute(_ attribute: CGAttribute) {
 		Append("[")
 		generateTypeReference(attribute.`Type`)
-		if let parameters = attribute.Parameters where parameters.Count > 0 {
+		if let parameters = attribute.Parameters, parameters.Count > 0 {
 			Append("(")
 			pascalGenerateAttributeParameters(parameters)
 			Append(")")
@@ -1071,25 +1106,37 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	}
 
 	override func generateTypeMembers(_ type: CGTypeDefinition) {
-		if type is CGInterfaceTypeDefinition {
-			generateTypeMembers(type, forVisibility: nil)
+		if isUnified {
+			if type.Members.Count > 0 {
+				decIndent()
+				AppendLine("private")
+				incIndent()
+				AppendLine()
+				super.generateTypeMembers(type)
+				// Todo: generate property and event implementations.
+				AppendLine()
+			}
 		} else {
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Unspecified)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Private)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Unit)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.UnitOrProtected)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.UnitAndProtected)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Assembly)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.AssemblyOrProtected)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.AssemblyAndProtected)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Protected)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Public)
-			generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Published)
+			if type is CGInterfaceTypeDefinition {
+				generateTypeMembers(type, forVisibility: nil)
+			} else {
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Unspecified)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Private)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Unit)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.UnitOrProtected)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.UnitAndProtected)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Assembly)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.AssemblyOrProtected)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.AssemblyAndProtected)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Protected)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Public)
+				generateTypeMembers(type, forVisibility: CGMemberVisibilityKind.Published)
+			}
 		}
 	}
 
 	internal func pascalKeywordForMethod(_ method: CGMethodDefinition) -> String {
-		if let returnType = method.ReturnType where !returnType.IsVoid {
+		if let returnType = method.ReturnType, !returnType.IsVoid {
 			return "function"
 		}
 		return "procedure"
@@ -1111,21 +1158,41 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		//overridden in delphi codegen
 	}
 
-	internal func pascalGenerateSecondHalfOfMethodHeader(_ method: CGMethodLikeMemberDefinition, implementation: Boolean) {
-		if let parameters = method.Parameters where parameters.Count > 0 {
+	internal func pascalGenerateSecondHalfOfMethodHeader(_ method: CGMethodLikeMemberDefinition, implementation: Boolean, includeVisibility: Boolean = false) {
+		if let parameters = method.Parameters, parameters.Count > 0 {
 			Append("(")
 			pascalGenerateDefinitionParameters(parameters)
 			Append(")")
 		}
-		if let returnType = method.ReturnType where !returnType.IsVoid {
+		if let returnType = method.ReturnType, !returnType.IsVoid {
 			Append(": ")
 			returnType.startLocation = currentLocation
 			generateTypeReference(returnType)
 			returnType.endLocation = currentLocation
 		}
 		Append(";")
-
+		
 		if !implementation {
+			
+			if isUnified {
+				Append(" ")
+				pascalGenerateMemberVisibilityKeyword(method.Visibility)
+				Append(";")
+			}
+
+			if self is CGOxygeneCodeGenerator {
+				if let `throws` = method.ThrownExceptions {
+					Append(" raises ")
+					if `throws`.Count > 0 {
+						helpGenerateCommaSeparatedList(`throws`) { t in
+							self.generateTypeReference(t, ignoreNullability: true)
+						}
+					} else {
+						Append("none")
+					}
+					Append(";")
+				}
+			}
 
 			if let method = method as? CGMethodDefinition {
 				pascalGenerateGenericConstraints(method.GenericParameters, needSemicolon: true)
@@ -1164,7 +1231,10 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		AppendLine()
 	}
 
-	internal func pascalGenerateMethodHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean) {
+	internal func pascalGenerateMethodHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean, includeVisibility: Boolean = false) {
+		if type is CGInterfaceTypeDefinition && method.Optional {
+			Append("[Optional] ")
+		}
 		if method.Static {
 			Append("class ")
 		}
@@ -1176,13 +1246,13 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			Append(".")
 		}
 		generateIdentifier(method.Name)
-		if let realMethod = method as? CGMethodDefinition, genericParameter = realMethod.GenericParameters {
+		if let realMethod = method as? CGMethodDefinition, let genericParameter = realMethod.GenericParameters {
 			pascalGenerateGenericParameters(genericParameter)
 		}
-		pascalGenerateSecondHalfOfMethodHeader(method, implementation: implementation)
+		pascalGenerateSecondHalfOfMethodHeader(method, implementation: implementation, includeVisibility: includeVisibility)
 	}
 
-	internal func pascalGenerateConstructorHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean) {
+	internal func pascalGenerateConstructorHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean, includeVisibility: Boolean = false) {
 		if method.Static {
 			Append("class ")
 		}
@@ -1198,31 +1268,49 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		} else {
 			Append("Create")
 		}
-		pascalGenerateSecondHalfOfMethodHeader(method, implementation: implementation)
+		pascalGenerateSecondHalfOfMethodHeader(method, implementation: implementation, includeVisibility: includeVisibility)
 	}
 
-	internal func pascalGenerateMethodBody(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition) {
-		if let localVariables = method.LocalVariables where localVariables.Count > 0 {
-			AppendLine("var")
-			incIndent()
-			for v in localVariables {
-				if let type = v.`Type` {
-					generateIdentifier(v.Name)
-					Append(": ")
-					generateTypeReference(type)
-					generateStatementTerminator()
+	internal func pascalGenerateMethodBody(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, allowLocalVariables: Boolean = true) {
+		if allowLocalVariables {
+			if let localVariables = method.LocalVariables, localVariables.Count > 0 {
+				AppendLine("var")
+				incIndent()
+				for v in localVariables {
+					if let type = v.`Type` {
+						generateIdentifier(v.Name)
+						Append(": ")
+						generateTypeReference(type)
+						generateStatementTerminator()
+					}
 				}
+				decIndent()
 			}
-			decIndent()
 		}
 		AppendLine("begin")
 		incIndent()
-		if let localVariables = method.LocalVariables where localVariables.Count > 0 {
+		if let localVariables = method.LocalVariables, localVariables.Count > 0 {
 			for v in localVariables {
-				if let val = v.Value {
+				if !allowLocalVariables {
+					Append("var ")
 					generateIdentifier(v.Name)
-					Append(" := ")
-					generateExpressionStatement(val)
+					if let type = v.`Type` {
+						Append(": ")
+						generateTypeReference(type)
+						if let val = v.Value {
+							generateIdentifier(v.Name)
+							Append(" := ")
+							generateExpressionStatement(val)
+						}
+					}
+					generateStatementTerminator()
+				} else {
+					if let val = v.Value {
+						generateIdentifier(v.Name)
+						Append(" := ")
+						generateExpressionStatement(val)
+						generateStatementTerminator()
+					}
 				}
 			}
 		}
@@ -1230,11 +1318,18 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		decIndent()
 		Append("end")
 		generateStatementTerminator()
-		AppendLine()
+		if !isUnified {
+			AppendLine()
+		}
 	}
 
 	override func generateMethodDefinition(_ method: CGMethodDefinition, type: CGTypeDefinition) {
-		pascalGenerateMethodHeader(method, type: type, methodKeyword:pascalKeywordForMethod(method), implementation: false)
+		pascalGenerateMethodHeader(method, type: type, methodKeyword:pascalKeywordForMethod(method), implementation: false, includeVisibility: isUnified)
+		if isUnified {
+			if (method.Virtuality != CGMemberVirtualityKind.Abstract) && !method.External && !method.Empty {
+				pascalGenerateMethodBody(method, type: type)
+			}
+		}
 	}
 
 	func pascalGenerateMethodImplementation(_ method: CGMethodDefinition, type: CGTypeDefinition) {
@@ -1245,7 +1340,12 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	}
 
 	override func generateConstructorDefinition(_ ctor: CGConstructorDefinition, type: CGTypeDefinition) {
-		pascalGenerateConstructorHeader(ctor, type: type, methodKeyword: "constructor", implementation: false)
+		pascalGenerateConstructorHeader(ctor, type: type, methodKeyword: "constructor", implementation: false, includeVisibility: isUnified)
+		if isUnified {
+			if ctor.Virtuality != CGMemberVirtualityKind.Abstract && !ctor.External && !ctor.Empty {
+				pascalGenerateMethodBody(ctor, type: type)
+			}
+		}
 	}
 
 	func pascalGenerateConstructorImplementation(_ ctor: CGConstructorDefinition, type: CGTypeDefinition) {
@@ -1273,7 +1373,10 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	}
 
 	override func generateCustomOperatorDefinition(_ customOperator: CGCustomOperatorDefinition, type: CGTypeDefinition) {
-		pascalGenerateMethodHeader(customOperator, type: type, methodKeyword: "operator", implementation: false)
+		pascalGenerateMethodHeader(customOperator, type: type, methodKeyword: "operator", implementation: false, includeVisibility: isUnified)
+		if isUnified {
+			pascalGenerateMethodBody(customOperator, type: type)
+		}
 	}
 
 	func pascalGenerateCustomOperatorImplementation(_ customOperator: CGCustomOperatorDefinition, type: CGTypeDefinition) {
@@ -1316,6 +1419,11 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 				generateExpression(initializer)
 			}
 		}
+		
+		if isUnified {
+			Append("; ")
+			pascalGenerateMemberVisibilityKeyword(variable.Visibility)
+		}
 		generateStatementTerminator()
 	}
 
@@ -1325,7 +1433,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		}
 		Append("property ")
 		generateIdentifier(property.Name)
-		if let parameters = property.Parameters where parameters.Count > 0 {
+		if let parameters = property.Parameters, parameters.Count > 0 {
 			Append("[")
 			pascalGenerateDefinitionParameters(parameters)
 			Append("]")
@@ -1384,7 +1492,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			
 		} else {
 			
-			if let getStatements = property.GetStatements, getterMethod = property.GetterMethodDefinition() {
+			if let getStatements = property.GetStatements, let getterMethod = property.GetterMethodDefinition() {
 				appendRead()
 				if !definitionOnly {
 					Append(" ")
@@ -1398,7 +1506,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 				}
 			}
 	
-			if let setStatements = property.SetStatements, setterMethod = property.SetterMethodDefinition() {
+			if let setStatements = property.SetStatements, let setterMethod = property.SetterMethodDefinition() {
 				appendWrite()
 				if !definitionOnly {
 					Append(" ")
@@ -1414,6 +1522,11 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		}
 		Append(";")
 
+		if isUnified {
+			Append(" ")
+			pascalGenerateMemberVisibilityKeyword(property.Visibility)
+			Append(";")
+		}
 		if property.Default {
 			Append(" default;")
 		}
@@ -1423,10 +1536,10 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 
 	func pascalGeneratePropertyAccessorDefinition(_ property: CGPropertyDefinition, type: CGTypeDefinition) {
 		if !definitionOnly {
-			if let getStatements = property.GetStatements, getterMethod = property.GetterMethodDefinition() {
+			if let getStatements = property.GetStatements, let getterMethod = property.GetterMethodDefinition() {
 				generateMethodDefinition(getterMethod, type: type)
 			}
-			if let setStatements = property.SetStatements, setterMethod = property.SetterMethodDefinition() {
+			if let setStatements = property.SetStatements, let setterMethod = property.SetterMethodDefinition() {
 				generateMethodDefinition(setterMethod!, type: type)
 			}
 		}
@@ -1531,7 +1644,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 
 	override func generateArrayTypeReference(_ array: CGArrayTypeReference, ignoreNullability: Boolean = false) {
 		Append("array")
-		if let bounds = array.Bounds where bounds.Count > 0 {
+		if let bounds = array.Bounds, bounds.Count > 0 {
 			Append("[")
 			for b in 0 ..< array.Bounds.Count {
 				let bound = array.Bounds[b]
