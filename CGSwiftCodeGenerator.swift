@@ -17,7 +17,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 					"as", "associativity", "autoreleasepool", "break", "case", "catch", "class", "continue", "convenience", "default", "defer", "deinit", "didSet", "do", "dynamicType",
 					"else", "enum", "extension", "fallthrough", "false", "final", "for", "func", "get", "guard", "if", "import", "in", "infix", "init", "inout", "internal", "is",
 					"lazy", "left", "let", "mutating", "nil", "none", "nonmutating", "open", "operator", "optional", "override", "postfix", "precedence", "prefix", "private", "protocol", "public",
-					"repeat", "required", "rethrows", "return", "right", "self", "Self", "set", "static", "strong", "struct", "subscript", "super", "switch", "throw", "throws", "true", "try", "Type", "typealias",
+					"repeat", "required", "rethrows", "return", "right", "self", "Self", "set", "static", "strong", "struct", "subscript", "super", "switch", "throw", "throws", "true", "try", "typealias",
 					"unowned", "var", "weak", "where", "while", "willSet"].ToList() as! List<String>
 	}
 
@@ -72,33 +72,38 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateForToLoopStatement(_ statement: CGForToLoopStatement) {
-		Append("for var ")
-		generateIdentifier(statement.LoopVariableName)
-		if let type = statement.LoopVariableType {
-			Append(": ")
-			generateTypeReference(type)
-		}
-		Append(" = ")
-		generateExpression(statement.StartValue)
-		Append("; ")
+		if statement.Direction == CGLoopDirectionKind.Forward {
+			Append("for ")
+			generateIdentifier(statement.LoopVariableName)
+			Append(" in ")
+			generateExpression(statement.StartValue)
+			Append(" ... ")
+			generateExpression(statement.EndValue)
+		} else {
+			Append("for var ")
+			generateIdentifier(statement.LoopVariableName)
+			if let type = statement.LoopVariableType {
+				Append(": ")
+				generateTypeReference(type)
+			}
+			Append(" = ")
+			generateExpression(statement.StartValue)
+			Append("; ")
 		
-		generateIdentifier(statement.LoopVariableName)
-		if statement.Direction == CGLoopDirectionKind.Forward {
-			Append(" <= ")
-		} else {
-			Append(" >= ")
-		}
-		generateExpression(statement.EndValue)
-		Append("; ")
+			generateIdentifier(statement.LoopVariableName)
+			if statement.Direction == CGLoopDirectionKind.Forward {
+				Append(" <= ")
+			} else {
+				Append(" >= ")
+			}
+			generateExpression(statement.EndValue)
+			Append("; ")
 
-		generateIdentifier(statement.LoopVariableName)
-		if statement.Direction == CGLoopDirectionKind.Forward {
-			Append("++ ")
-		} else {
-			Append("-- ")
+			generateIdentifier(statement.LoopVariableName)
+			Append("--")
 		}
 
-		AppendLine("{")
+		AppendLine(" {")
 		incIndent()
 		generateStatementSkippingOuterBeginEndBlock(statement.NestedStatement)
 		decIndent()
@@ -153,7 +158,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 			AppendLine(":")
 			generateStatementsIndentedUnlessItsASingleBeginEndBlock(c.Statements)
 		}
-		if let defaultStatements = statement.DefaultCase where defaultStatements.Count > 0 {
+		if let defaultStatements = statement.DefaultCase, defaultStatements.Count > 0 {
 			AppendLine("default:")
 			generateStatementsIndentedUnlessItsASingleBeginEndBlock(defaultStatements)
 		}
@@ -214,14 +219,14 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 			generateStatements(statement.Statements)
 			decIndent()
 			AppendLine("}")
-			if let finallyStatements = statement.FinallyStatements where finallyStatements.Count > 0 {
+			if let finallyStatements = statement.FinallyStatements, finallyStatements.Count > 0 {
 				AppendLine("__finally {")
 				incIndent()
 				generateStatements(finallyStatements)
 				decIndent()
 				AppendLine("}")
 			}
-			if let catchBlocks = statement.CatchBlocks where catchBlocks.Count > 0 {
+			if let catchBlocks = statement.CatchBlocks, catchBlocks.Count > 0 {
 				for b in catchBlocks {
 					if let type = b.`Type` {
 						Append("__catch ")
@@ -361,13 +366,11 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	override func generateTypeOfExpression(_ expression: CGTypeOfExpression) {
 		if let typeReferenceExpression = expression.Expression as? CGTypeReferenceExpression {
 			generateTypeReference(typeReferenceExpression.`Type`, ignoreNullability: true)
-		} else {
-			generateExpression(expression.Expression)
-		}
-		if expression.Expression is CGTypeReferenceExpression {
 			Append(".self")
 		} else {
-			Append(".dynamicType")
+			Append("dynamicType(")
+			generateExpression(expression.Expression)
+			Append(")")
 		}
 	}
 
@@ -468,7 +471,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 				self.Append("(")
 				self.swiftGenerateDefinitionParameters(member.Parameters)
 				self.Append(")")
-				if let returnType = member.ReturnType where !returnType.IsVoid {
+				if let returnType = member.ReturnType, !returnType.IsVoid {
 					self.Append(" -> ")
 					self.generateTypeReference(returnType)
 				}
@@ -488,7 +491,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateUnaryOperatorExpression(_ expression: CGUnaryOperatorExpression) {
-		if let `operator` = expression.Operator where `operator` == .ForceUnwrapNullable {
+		if let `operator` = expression.Operator, `operator` == .ForceUnwrapNullable {
 			generateExpression(expression.Value)
 			Append("!")
 		} else {
@@ -640,14 +643,14 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	func swiftGenerateGenericParameters(_ parameters: List<CGGenericParameterDefinition>?) {
-		if let parameters = parameters where parameters.Count > 0 {
+		if let parameters = parameters, parameters.Count > 0 {
 			Append("<")
 			helpGenerateCommaSeparatedList(parameters) { param in
 				self.generateIdentifier(param.Name)
 				// variance isn't supported in swift
 				//todo: 72081: Silver: NRE in "if let"
-				//if let constraints = param.Constraints, filteredConstraints = constraints.Where({ return $0 is CGGenericIsSpecificTypeConstraint}).ToList() where filteredConstraints.Count > 0 {
-				if let constraints = param.Constraints where constraints.Count > 0 {
+				//if let constraints = param.Constraints, filteredConstraints = constraints.Where({ return $0 is CGGenericIsSpecificTypeConstraint}).ToList(), filteredConstraints.Count > 0 {
+				if let constraints = param.Constraints, constraints.Count > 0 {
 					let filteredConstraints = constraints.Where({ return $0 is CGGenericIsSpecificTypeConstraint })
 					self.Append(": ")
 					self.helpGenerateCommaSeparatedList(filteredConstraints) { constraint in
@@ -708,7 +711,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	
 	override func generateNewInstanceExpression(_ expression: CGNewInstanceExpression) {
 		generateExpression(expression.`Type`, ignoreNullability: true)
-		if let bounds = expression.ArrayBounds where bounds.Count > 0 {
+		if let bounds = expression.ArrayBounds, bounds.Count > 0 {
 			Append("[](count: ")
 			helpGenerateCommaSeparatedList(bounds) { boundExpression in 
 				self.generateExpression(boundExpression)
@@ -716,11 +719,11 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 			Append(")")
 		} else {
 			Append("(")
-			if let name = expression.ConstructorName {
-				generateIdentifier(removeWithPrefix(name))
-				Append(": ")
+			if let ctorName = expression.ConstructorName {
+				swiftGenerateCallParameters(expression.Parameters, firstParamName: removeWithPrefix(ctorName))
+			} else {
+				swiftGenerateCallParameters(expression.Parameters)
 			}
-			swiftGenerateCallParameters(expression.Parameters)
 			Append(")")
 		}
 	}
@@ -728,7 +731,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	override func generatePropertyAccessExpression(_ property: CGPropertyAccessExpression) {
 		swiftGenerateCallSiteForExpression(property)
 		generateIdentifier(property.Name)
-		if let params = property.Parameters where params.Count > 0 {
+		if let params = property.Parameters, params.Count > 0 {
 			Append("[")
 			swiftGenerateCallParameters(property.Parameters)
 			Append("]")
@@ -819,7 +822,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	override func generateAttribute(_ attribute: CGAttribute) {
 		Append("@")
 		generateTypeReference(attribute.`Type`, ignoreNullability: true)
-		if let parameters = attribute.Parameters where parameters.Count > 0 {
+		if let parameters = attribute.Parameters, parameters.Count > 0 {
 			Append("(")
 			swiftGenerateAttributeParameters(parameters)
 			Append(")")
@@ -832,16 +835,27 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 		}
 	}
 	
-	func swiftGenerateTypeVisibilityPrefix(_ visibility: CGTypeVisibilityKind) {
+	func swiftGenerateTypeVisibilityPrefix(_ visibility: CGTypeVisibilityKind, sealed: Boolean = false) {
 		switch visibility {
-			case .Unspecified: break /* no-op */
-			case .Unit: Append("internal ")
-			case .Assembly: Append("internal ")
-			case .Public: Append("public ")
+			case .Unspecified:
+				if sealed {
+					Append("final ")
+				}
+			case .Unit, .Assembly:
+				Append("internal ") // non-sealed for internal use is implied
+				if sealed {
+					Append("final ")
+				}
+			case .Public:
+				if sealed {
+					Append("public final ")
+				} else {
+					Append("open ")
+				}
 		}
 	}
 	
-	func swiftGenerateMemberTypeVisibilityPrefix(_ visibility: CGMemberVisibilityKind, appendSpace: Boolean = true) {
+	func swiftGenerateMemberTypeVisibilityPrefix(_ visibility: CGMemberVisibilityKind, virtuality: CGMemberVirtualityKind, appendSpace: Boolean = true) {
 		switch visibility {
 			case .Unspecified: break /* no-op */
 			case .Private: Append("private")
@@ -853,8 +867,21 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 			case .AssemblyOrProtected: fallthrough
 			case .Protected: fallthrough
 			case .Published: fallthrough
-			case .Public: Append("public")
+			case .Public:
+				if virtuality == .Virtual {
+					Append("open")
+				} else {
+					Append("public")
+				}
 		}
+		switch virtuality {
+			case .None: break;
+			case .Virtual: break; // handled above, and implied for non-pubic
+			case .Abstract: if Dialect == CGSwiftCodeGeneratorDialect.Silver { Append(" __abstract") }
+			case .Override: Append(" override")
+			case .Final: Append(" final")
+			case .Reintroduce: break;
+		}		
 		if appendSpace {
 			Append(" ")
 		}
@@ -869,24 +896,6 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	func swiftGenerateAbstractPrefix(_ isAbstract: Boolean) {
 		if isAbstract && Dialect == CGSwiftCodeGeneratorDialect.Silver {
 			Append("__abstract ")
-		}
-	}
-
-	func swiftGenerateSealedPrefix(_ isSealed: Boolean) {
-		if isSealed {
-			Append("final ")
-		}
-	}
-
-	func swiftGenerateVirtualityPrefix(_ member: CGMemberDefinition) {
-		switch member.Virtuality {
-			//case .None
-			//case .Virtual
-			case .Abstract: if Dialect == CGSwiftCodeGeneratorDialect.Silver { Append("__abstract ") }
-			case .Override: Append("override ")
-			case .Final: Append("final ")
-			//case Reintroduce
-			default:
 		}
 	}
 
@@ -924,7 +933,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 			}
 		}
 		Append(") -> ")
-		if let returnType = block.ReturnType where !returnType.IsVoid {
+		if let returnType = block.ReturnType, !returnType.IsVoid {
 			generateTypeReference(returnType)
 		} else {
 			Append("()")
@@ -958,10 +967,9 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 	
 	override func generateClassTypeStart(_ type: CGClassTypeDefinition) {
-		swiftGenerateTypeVisibilityPrefix(type.Visibility)
+		swiftGenerateTypeVisibilityPrefix(type.Visibility, sealed: type.Sealed)
 		swiftGenerateStaticPrefix(type.Static)
 		swiftGenerateAbstractPrefix(type.Abstract)
-		swiftGenerateSealedPrefix(type.Sealed)
 		Append("class ")
 		generateIdentifier(type.Name)
 		swiftGenerateGenericParameters(type.GenericParameters)
@@ -976,10 +984,9 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 	
 	override func generateStructTypeStart(_ type: CGStructTypeDefinition) {
-		swiftGenerateTypeVisibilityPrefix(type.Visibility)
+		swiftGenerateTypeVisibilityPrefix(type.Visibility, sealed: type.Sealed)
 		swiftGenerateStaticPrefix(type.Static)
 		swiftGenerateAbstractPrefix(type.Abstract)
-		swiftGenerateSealedPrefix(type.Sealed)
 		Append("struct ")
 		generateIdentifier(type.Name)
 		swiftGenerateGenericParameters(type.GenericParameters)
@@ -994,8 +1001,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}		
 	
 	override func generateInterfaceTypeStart(_ type: CGInterfaceTypeDefinition) {
-		swiftGenerateTypeVisibilityPrefix(type.Visibility)
-		swiftGenerateSealedPrefix(type.Sealed)
+		swiftGenerateTypeVisibilityPrefix(type.Visibility, sealed: type.Sealed)
 		Append("protocol ")
 		generateIdentifier(type.Name)
 		swiftGenerateGenericParameters(type.GenericParameters)
@@ -1030,11 +1036,13 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	override func generateMethodDefinition(_ method: CGMethodDefinition, type: CGTypeDefinition) {
 
 		if type is CGInterfaceTypeDefinition {
+			if method.Optional {
+				Append("optional ")
+			}
 			swiftGenerateStaticPrefix(method.Static && !type.Static)
 		} else {
-			swiftGenerateMemberTypeVisibilityPrefix(method.Visibility)
+			swiftGenerateMemberTypeVisibilityPrefix(method.Visibility, virtuality: method.Virtuality)
 			swiftGenerateStaticPrefix(method.Static && !type.Static)
-			swiftGenerateVirtualityPrefix(method)
 			if method.External && Dialect == CGSwiftCodeGeneratorDialect.Silver {
 				Append("__extern ")
 			}
@@ -1050,7 +1058,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 			Append(" throws")
 		}
 		
-		if let returnType = method.ReturnType where !returnType.IsVoid {
+		if let returnType = method.ReturnType, !returnType.IsVoid {
 			Append(" -> ")
 			returnType.startLocation = currentLocation
 			generateTypeReference(returnType)
@@ -1073,8 +1081,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	override func generateConstructorDefinition(_ ctor: CGConstructorDefinition, type: CGTypeDefinition) {
 		if type is CGInterfaceTypeDefinition {
 		} else {
-			swiftGenerateMemberTypeVisibilityPrefix(ctor.Visibility)
-			swiftGenerateVirtualityPrefix(ctor)
+			swiftGenerateMemberTypeVisibilityPrefix(ctor.Visibility, virtuality: ctor.Virtuality)
 		}
 		Append("init")
 		switch ctor.Nullability {
@@ -1123,9 +1130,8 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 		if type is CGInterfaceTypeDefinition {
 			swiftGenerateStaticPrefix(finalizer.Static && !type.Static)
 		} else {
-			swiftGenerateMemberTypeVisibilityPrefix(finalizer.Visibility)
+			swiftGenerateMemberTypeVisibilityPrefix(finalizer.Visibility, virtuality: finalizer.Virtuality)
 			swiftGenerateStaticPrefix(finalizer.Static && !type.Static)
-			swiftGenerateVirtualityPrefix(finalizer)
 			if finalizer.External && Dialect == CGSwiftCodeGeneratorDialect.Silver {
 				Append("__extern ")
 			}
@@ -1146,7 +1152,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateFieldDefinition(_ field: CGFieldDefinition, type: CGTypeDefinition) {
-		swiftGenerateMemberTypeVisibilityPrefix(field.Visibility)
+		swiftGenerateMemberTypeVisibilityPrefix(field.Visibility, virtuality: field.Virtuality)
 		swiftGenerateStaticPrefix(field.Static && !type.Static)
 		swiftGenerateStorageModifierPrefix(field.`Type`)
 		if field.Constant {
@@ -1172,31 +1178,30 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 
 		if property.GetterVisibility != nil || property.SetterVisibility != nil {
 			if let v = property.GetterVisibility {
-				swiftGenerateMemberTypeVisibilityPrefix(v, appendSpace: false)
+				swiftGenerateMemberTypeVisibilityPrefix(v, virtuality: property.Virtuality, appendSpace: false)
 				Append("(get) ")
 			} else {
-				swiftGenerateMemberTypeVisibilityPrefix(property.Visibility)
+				swiftGenerateMemberTypeVisibilityPrefix(property.Visibility, virtuality: property.Virtuality)
 			}
 					
 			if let v = property.SetterVisibility {
-				swiftGenerateMemberTypeVisibilityPrefix(v, appendSpace: false)
+				swiftGenerateMemberTypeVisibilityPrefix(v, virtuality: property.Virtuality, appendSpace: false)
 				Append("(set) ")
 			} else {
-				swiftGenerateMemberTypeVisibilityPrefix(property.Visibility, appendSpace: false)
+				swiftGenerateMemberTypeVisibilityPrefix(property.Visibility, virtuality: property.Virtuality, appendSpace: false)
 				Append("(set) ")
 			}
 		} else {
-			swiftGenerateMemberTypeVisibilityPrefix(property.Visibility)
+			swiftGenerateMemberTypeVisibilityPrefix(property.Visibility, virtuality: property.Virtuality)
 		}
 		
 		swiftGenerateStaticPrefix(property.Static && !type.Static)
-		swiftGenerateVirtualityPrefix(property)
 		if property.Lazy {
 			Append("lazy ")
 		}
 		swiftGenerateStorageModifierPrefix(property.`Type`)
 		
-		if let params = property.Parameters where params.Count > 0 {
+		if let params = property.Parameters, params.Count > 0 {
 			
 			Append("subscript ")
 			generateIdentifier(property.Name)
@@ -1286,7 +1291,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateEventDefinition(_ event: CGEventDefinition, type: CGTypeDefinition) {
 		if Dialect == CGSwiftCodeGeneratorDialect.Silver {
-			swiftGenerateMemberTypeVisibilityPrefix(event.Visibility)
+			swiftGenerateMemberTypeVisibilityPrefix(event.Visibility, virtuality: event.Virtuality)
 			swiftGenerateStaticPrefix(event.Static && !type.Static)
 			Append("__event ")
 			generateIdentifier(event.Name)

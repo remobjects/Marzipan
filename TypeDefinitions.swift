@@ -140,6 +140,7 @@ public __abstract class CGMemberDefinition: CGEntity {
 	public var Comment: CGCommentStatement?
 	public var Attributes = List<CGAttribute>()
 	public var Condition: CGConditionalDefine?
+	public var ThrownExceptions: List<CGTypeReference>? // nil means unknown; empty list means known to not throw.
 	
 	public init(_ name: String) {
 		Name = name
@@ -184,6 +185,7 @@ public __abstract class CGMethodLikeMemberDefinition: CGMemberDefinition {
 	public var Async = false /* Oxygene only */
 	public var Awaitable = false /* C# only */
 	public var Throws = false /* Swift and Java only */
+	public var Optional = false /* Swift only */
 	public var CallingConvention: CGCallingConventionKind? /* Delphi and C++Builder only */
 	public var Statements: List<CGStatement>
 	public var LocalVariables: List<CGVariableDeclarationStatement>? // Legacy Delphi only.
@@ -302,13 +304,13 @@ public class CGPropertyDefinition: CGFieldOrPropertyDefinition {
 	} 
 	
 	internal func GetterMethodDefinition(`prefix`: String = "get__") -> CGMethodDefinition? {
-		if let getStatements = GetStatements, type = `Type` {
+		if let getStatements = GetStatements, let type = `Type` {
 			let method = CGMethodDefinition(`prefix`+Name, getStatements)
 			method.ReturnType = type
 			method.Parameters = Parameters
 			method.Static = Static
 			return method
-		} else if let getExpression = GetExpression, type = `Type` {
+		} else if let getExpression = GetExpression, let type = `Type` {
 			let method = CGMethodDefinition(`prefix`+Name)
 			method.ReturnType = type
 			method.Parameters = Parameters
@@ -322,12 +324,12 @@ public class CGPropertyDefinition: CGFieldOrPropertyDefinition {
 	public static let MAGIC_VALUE_PARAMETER_NAME = "___value___"
 	
 	internal func SetterMethodDefinition(`prefix`: String = "set__") -> CGMethodDefinition? {
-		if let setStatements = SetStatements, type = `Type` {
+		if let setStatements = SetStatements, let type = `Type` {
 			let method = CGMethodDefinition(`prefix`+Name, setStatements)
 			method.Parameters.AddRange(Parameters)
 			method.Parameters.Add(CGParameterDefinition(MAGIC_VALUE_PARAMETER_NAME, type))
 			return method
-		} else if let setExpression = SetExpression, type = `Type` {
+		} else if let setExpression = SetExpression, let type = `Type` {
 			let method = CGMethodDefinition(`prefix`+Name)
 			method.Parameters.AddRange(Parameters)
 			method.Parameters.Add(CGParameterDefinition(MAGIC_VALUE_PARAMETER_NAME, type))
@@ -356,7 +358,7 @@ public class CGEventDefinition: CGFieldLikeMemberDefinition {
 	}
 
 	internal func AddMethodDefinition() -> CGMethodDefinition? {
-		if let addStatements = AddStatements, type = `Type` {
+		if let addStatements = AddStatements, let type = `Type` {
 			let method = CGMethodDefinition("add__"+Name, addStatements)
 			method.Parameters.Add(CGParameterDefinition("___value", type))
 			return method
@@ -365,7 +367,7 @@ public class CGEventDefinition: CGFieldLikeMemberDefinition {
 	}
 
 	internal func RemoveMethodDefinition() -> CGMethodDefinition? {
-		if let removeStatements = RemoveStatements, type = `Type` {
+		if let removeStatements = RemoveStatements, let type = `Type` {
 			let method = CGMethodDefinition("remove__"+Name, removeStatements)
 			method.Parameters.Add(CGParameterDefinition("___value", type))
 			return method
