@@ -208,7 +208,7 @@ begin
     result := fAssemblies.objectForKey(aPath);
     if assigned(result) then exit;
     var lasm := mono_domain_assembly_open (fDomain, aPath);
-    if lasm = nil then raise new MZException('CouldNotLoadAssembly') reason(NSString.stringWithFormat('Could not load assembly "%@".', aPath)) userinfo(nil);
+    if lasm = nil then raise new MZException withName('CouldNotLoadAssembly') reason(NSString.stringWithFormat('Could not load assembly "%@".', aPath)) userinfo(nil);
     result := new MZMonoAssembly &assembly(lasm);
     fAssemblies.setObject(result) forKey(aPath);
     if fAssemblies.count = 1 then
@@ -239,7 +239,7 @@ begin
     result := fTypes.objectForKey(aFullName);
     if result <> nil then exit;
     var ltmp := mono_reflection_type_from_name(aFullName, nil);
-    if ltmp = nil then raise new MZException('UnknownType') reason(NSString.stringWithFormat('Could not find type "%@".', aFullName)) userinfo(nil);
+    if ltmp = nil then raise new MZException withName('UnknownType') reason(NSString.stringWithFormat('Could not find type "%@".', aFullName)) userinfo(nil);
     result := new MZType withType(ltmp);
     fTypes.setObject(result) forKey(aFullName); 
   end;
