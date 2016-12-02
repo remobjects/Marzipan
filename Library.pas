@@ -33,6 +33,7 @@ type
     property &type: &Class := typeOf(MZObject);
     property elements: ^^MonoObject read ^^MonoObject(mono_array_addr_with_size(^MonoArray(__instance), sizeOf(^MonoObject), 0));
     property count: NSUInteger read mono_array_length(^MonoArray(__instance));
+    property «Count»: NSUInteger read count;
     method objectAtIndex(aIndex: Integer): id;
     method objectAtIndexedSubscript(aIndex: Integer): id;
     method setObject(aObject: NSObject) atIndexedSubscript(aValue: Integer);
@@ -49,12 +50,13 @@ type
 
     class var fSizeField: ^MonoClassField;
     class var fItemsField: ^MonoClassField;
-    method count: NSUInteger;
+    method get_count: NSUInteger;
   public
     property &type: &Class := typeOf(MZObject);
     constructor withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
     method clear;
-    property count: NSUInteger read count;
+    property count: NSUInteger read get_count;
+    property «Count»: NSUInteger read count;
     method objectAtIndex(aIndex: Integer): id;
     method objectAtIndexedSubscript(aIndex: Integer): id;
     method countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
@@ -65,6 +67,7 @@ type
     where T is class;
   public
     property count: NSUInteger read mapped.count;
+    //property «Count»: NSUInteger read count;
     method objectAtIndex(aIndex: Integer): T; mapped to objectAtIndex(aIndex);
     method objectAtIndexedSubscript(aIndex: Integer): T; mapped to objectAtIndexedSubscript(aIndex);
   end;
@@ -258,7 +261,7 @@ begin
   result := fArray.countByEnumeratingWithState(state) objects(buffer) count(len);
 end;
 
-method MZObjectList.count: NSUInteger;
+method MZObjectList.get_count: NSUInteger;
 begin
   if fItems = nil then MZObjectListInitFields(self);
   exit fSize^;
