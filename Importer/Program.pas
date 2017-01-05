@@ -46,28 +46,28 @@ begin
     WriteSyntax;
     exit;
   end;
-  
+
   var lSettingsFile := args[0];
   var lLanguage := args[1];
-  
+
   var lCodeGenerator := case lLanguage:ToLower() of
     'oxygene','pascal','pas': new CGOxygeneCodeGenerator();
-    'c#','csharp','hydrogene','cs': new CGCSharpCodeGenerator(CGCSharpCodeGeneratorDialect.Hydrogene);
-    'swift','silver': new CGSwiftCodeGenerator(CGSwiftCodeGeneratorDialect.Silver);
+    'c#','csharp','hydrogene','cs': new CGCSharpCodeGenerator withDialect(CGCSharpCodeGeneratorDialect.Hydrogene);
+    'swift','silver': new CGSwiftCodeGenerator withDialect(CGSwiftCodeGeneratorDialect.Silver);
     'objc','objectivec','m': new CGObjectiveCHCodeGenerator();
   end;
-  
+
   if not assigned(lCodeGenerator) then begin
     WriteSyntax;
     exit;
   end;
-  
+
   if not File.Exists(lSettingsFile) then begin
     writeLn('Import settings file '+Path.GetFileName(lSettingsFile)+' does not exist');
     writeLn();
     exit;
   end;
-  
+
   var x := new ImporterSettings;
   x.LoadFromXml(lSettingsFile);
   Environment.CurrentDirectory := Path.GetDirectoryName(args[0]);
