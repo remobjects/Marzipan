@@ -87,7 +87,7 @@ begin
       writeLn('Warning: Type "'+el.Name+'" not found.');
       continue;
     end;
-    
+
     var lNewName := if not String.IsNullOrEmpty(el.TargetName) then el.TargetName else fSettings.Prefix+ lLib[0].Name;
     if lLib.Count = 0 then
       raise new Exception('Type "'+el.Name+'" was not found')
@@ -112,7 +112,7 @@ begin
 
   var lVars := new List<CGMemberDefinition>;
   var lMethods := new List<CGMemberDefinition>;
-  
+
   var lNames: HashSet<String> := new HashSet<String>;
   var lMethodMap: Dictionary<MethodDefinition, CGMethodDefinition> := new Dictionary<MethodDefinition,CGMethodDefinition>;
   for each el in fTypes.OrderBy(t -> t.Key.FullName) do begin
@@ -134,12 +134,12 @@ begin
     lNames.Clear;
     lMethodMap.Clear;
     for each meth in el.Key.Methods.OrderBy(m -> GetMethodSignature(m)) index n do begin
-      if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue; 
+      if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue;
       if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
       if meth.Parameters.Any(a->a.ParameterType.IsGenericInstance and a.ParameterType.IsValueType) then continue;
       if not meth.IsPublic then continue;
-      
-      var lMonoSig := new CGBlockTypeDefinition(''); 
+
+      var lMonoSig := new CGBlockTypeDefinition('');
       lMonoSig.IsPlainFunctionPointer := true;
 
       if (meth.ReturnType.FullName <> 'System.Void') then
@@ -156,18 +156,18 @@ begin
 
       for each elpar in meth.Parameters do begin
         var lParamType: CGTypeReference;
-        if elpar.ParameterType.IsByReference then 
-          lParamType := new CGPointerTypeReference( GetMonoType(elpar.ParameterType.GetElementType)) 
-        else 
+        if elpar.ParameterType.IsByReference then
+          lParamType := new CGPointerTypeReference( GetMonoType(elpar.ParameterType.GetElementType))
+        else
           lParamType := GetMonoType(elpar.ParameterType);
 
-        lMonoSig.Parameters.Add(new CGParameterDefinition('_' + elpar.Name, lParamType));  
+        lMonoSig.Parameters.Add(new CGParameterDefinition('_' + elpar.Name, lParamType));
       end;
-      
+
       lMonoSig.Parameters.Add(new CGParameterDefinition('exception', new CGPointerTypeReference(new CGPointerTypeReference(new CGNamedTypeReference('MonoException')))));
-      
+
       lVars.Add(lCGFieldDefinition);
-      
+
       var lMeth := new CGMethodDefinition(meth.Name);
       lMeth.Visibility := CGMemberVisibilityKind.Public;
       lMethodMap[meth] := lMeth;
@@ -175,14 +175,14 @@ begin
       if meth.IsConstructor then begin
         lMeth.Name := 'init';
         lMeth.ReturnType := new CGPredefinedTypeReference(CGPredefinedTypeKind.Dynamic);
-      end; 
+      end;
       if lNames.Contains(lMeth.Name) then
         for i: Integer := 2 to Int32.MaxValue -1 do begin
           if not lNames.Contains(lMeth.Name+i) then begin
             lMeth.Name := lMeth.Name+i;
             break;
           end;
-            
+
         end;
       lNames.Add(lMeth.Name);
       lMethods.Add(lMeth);
@@ -190,19 +190,19 @@ begin
 
       var lCGBeginEndBlockStatement := new CGBeginEndBlockStatement();
       lCGBeginEndBlockStatement.Statements := new List<CGStatement>();
-      
+
       //Create CGIfThenElseStatement
       var lCondition := new CGUnaryOperatorExpression(new CGAssignedExpression(new CGNamedIdentifierExpression(lCGFieldDefinition.Name)), CGUnaryOperatorKind.Not);
       //Source
       var lValue := new CGMethodCallExpression(nil, 'getMethodThunk', [new CGCallParameter(new CGStringLiteralExpression(GetMethodSignature(meth)))]);
       lValue.CallSite := new CGNamedIdentifierExpression(lFTypePropertyName);
-      
+
       //Dest
       var lCGUnaryOperatorExpression := new CGUnaryOperatorExpression(new CGNamedIdentifierExpression(lCGFieldDefinition.Name), CGUnaryOperatorKind.AddressOf);
       var lUnaryValue := new CGTypeCastExpression(lCGUnaryOperatorExpression, new CGPointerTypeReference(new CGPointerTypeReference(new CGPredefinedTypeReference(CGPredefinedTypeKind.Void))));
 
       var lIfStatement : CGStatement := new CGAssignmentStatement(new CGPointerDereferenceExpression(lUnaryValue), lValue);
-           
+
       var lElseStatement: CGStatement := nil;
       var lCGIfThenElseStatement := new CGIfThenElseStatement(lCondition, lIfStatement, lElseStatement);
 
@@ -211,14 +211,14 @@ begin
        var lCGVariableDeclarationStatement := new CGVariableDeclarationStatement('ex', new CGPointerTypeReference(new CGNamedTypeReference('MonoException')));
        lCGVariableDeclarationStatement.Value := new CGNilExpression();
        lCGBeginEndBlockStatement.Statements.Add(lCGVariableDeclarationStatement);
-       
+
        var lHasResult := meth.ReturnType.FullName <> 'System.Void';
- 
+
        if lHasResult then
         lCGBeginEndBlockStatement.Statements.Add(new CGVariableDeclarationStatement('res', GetMonoType(meth.ReturnType)));
 
       var lCall := new CGMethodCallExpression(nil, lCGFieldDefinition.Name);
-      
+
       if meth.IsStatic = false then begin
         if meth.IsConstructor then begin
           var lCGMethodCallExpression := new CGMethodCallExpression(new CGInheritedExpression(), 'init');
@@ -226,7 +226,7 @@ begin
           lCGBeginEndBlockStatement.Statements.Insert(0, new CGBinaryOperatorExpression(new CGSelfExpression(), lCGMethodCallExpression, CGBinaryOperatorKind.Assign));
 
           var lMonoObject := new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'));
-          var lDefaultValue := new CGMethodCallExpression(new CGNamedIdentifierExpression(lFTypePropertyName), 'instantiate'); 
+          var lDefaultValue := new CGMethodCallExpression(new CGNamedIdentifierExpression(lFTypePropertyName), 'instantiate');
           lCGBeginEndBlockStatement.Statements.Add(new CGVariableDeclarationStatement('inst', lMonoObject, lDefaultValue));
         end else
           lCGBeginEndBlockStatement.Statements.Add(new CGVariableDeclarationStatement('inst', new CGPointerTypeReference(new CGNamedTypeReference('MonoObject')), new CGNamedIdentifierExpression('__instance')));
@@ -239,14 +239,18 @@ begin
       for i: Integer := 0 to meth.Parameters.Count -1 do begin
         var lParamName := '_'+meth.Parameters[i].Name;
         var lParamType: CGTypeReference;
-        var lParamModifier : CGParameterModifierKind;
+        var lParamModifier: CGParameterModifierKind;
         var lPTar: TypeReference := meth.Parameters[i].ParameterType;
         var lIsByReference := lPTar.IsByReference;
         if lIsByReference then begin
           lPTar := ByReferenceType(lPTar).ElementType;
           lParamType := GetMarzipanType(lPTar);
-          lParamModifier := CGParameterModifierKind.Var;
-        end else
+          if meth.Parameters[i].IsOut then
+            lParamModifier := CGParameterModifierKind.Out
+          else
+            lParamModifier := CGParameterModifierKind.Var;
+        end
+        else
           lParamType := GetMarzipanType(lPTar);
 
         var lPar := new CGParameterDefinition(lParamName, lParamType);
@@ -255,7 +259,7 @@ begin
         lMeth.Parameters.Add(lPar);
 
         if lPTar.FullName = 'System.String' then begin
-          if lPar.Modifier = CGParameterModifierKind.Var then begin
+          if lPar.Modifier in [CGParameterModifierKind.Var,CGParameterModifierKind.Out] then begin
             lCGBeginEndBlockStatement.Statements.Add(new CGVariableDeclarationStatement('par'+i, GetMonoType(lPTar),
                                                                                   new CGMethodCallExpression(new CGNamedIdentifierExpression('MZString'), 'MonoStringWithNSString', [new CGCallParameter(new CGNamedIdentifierExpression(lPar.Name))]) ));
             lCall.Parameters.Add(new CGCallParameter(new CGUnaryOperatorExpression(new CGNamedIdentifierExpression('par'+i), CGUnaryOperatorKind.AddressOf)));
@@ -266,12 +270,12 @@ begin
           end
           else begin
             lCall.Parameters.Add(new CGCallParameter(new CGMethodCallExpression(
-                                  new CGTypeReferenceExpression(new CGNamedTypeReference('MZString')), 'MonoStringWithNSString', 
+                                  new CGTypeReferenceExpression(new CGNamedTypeReference('MZString')), 'MonoStringWithNSString',
                                  [new CGCallParameter(new CGNamedIdentifierExpression(lPar.Name))])));
-          end; 
-        end else 
+          end;
+        end else
         if IsObjectRef(lPTar) then begin
-          if lPar.Modifier = CGParameterModifierKind.Var then begin
+          if lPar.Modifier in [CGParameterModifierKind.Var,CGParameterModifierKind.Out] then begin
             var lTempExpr := new CGIfThenElseExpression(new CGUnaryOperatorExpression(new CGAssignedExpression(new CGNamedIdentifierExpression(lPar.Name)), CGUnaryOperatorKind.Not), new CGNilExpression(), new CGMethodCallExpression(new CGNamedIdentifierExpression(lPar.Name), '__instance'));
 
             lCGBeginEndBlockStatement.Statements.Add(new CGVariableDeclarationStatement('par'+i, GetMonoType(lPTar), new CGTypeCastExpression(lTempExpr, GetMonoType(lPTar)) ));
@@ -288,19 +292,19 @@ begin
                                                                                             GenericInstanceType(lPTar).GenericArguments[0]
                                                                                           else
                                                                                             lPTar.GetElementType), lArr)))
-            else 
+            else
               lAfterCall.AddLast(new CGAssignmentStatement(new CGNamedIdentifierExpression(lPar.Name), WrapObject(new CGNamedIdentifierExpression('par'+i), lPar.Type)));
           end else begin
             lCall.Parameters.Add(new CGCallParameter(new CGTypeCastExpression(new CGIfThenElseExpression(new CGUnaryOperatorExpression(new CGAssignedExpression(new CGNamedIdentifierExpression(lPar.Name)), CGUnaryOperatorKind.Not), new CGNilExpression(), new CGMethodCallExpression(new CGNamedIdentifierExpression(lPar.Name), '__instance')) , GetMonoType(lPTar))));
           end;
         end else begin
-          if lPar.Modifier = CGParameterModifierKind.Var then
+          if lPar.Modifier in [CGParameterModifierKind.Var,CGParameterModifierKind.Out] then
             lCall.Parameters.Add(new CGCallParameter(new CGUnaryOperatorExpression(new CGNamedIdentifierExpression(lPar.Name), CGUnaryOperatorKind.AddressOf)))
           else
             lCall.Parameters.Add(new CGCallParameter(new CGNamedIdentifierExpression(lPar.Name)));
         end;
       end;
-      
+
       lCall.Parameters.Add(new CGCallParameter(new CGUnaryOperatorExpression(new CGNamedIdentifierExpression('ex'), CGUnaryOperatorKind.AddressOf)));
 
       if lHasResult then begin
@@ -310,16 +314,16 @@ begin
       else begin
          lCGBeginEndBlockStatement.Statements.Add(lCall);
       end;
-      
+
       for each elz in lAfterCall do
         lCGBeginEndBlockStatement.Statements.Add(elz);
 
-       var lCGIfElseStat := new CGIfThenElseStatement(new CGAssignedExpression( new CGNamedIdentifierExpression('ex')), 
+       var lCGIfElseStat := new CGIfThenElseStatement(new CGAssignedExpression( new CGNamedIdentifierExpression('ex')),
                               new CGMethodCallExpression(nil, 'raiseException', [new CGCallParameter(new CGNamedIdentifierExpression('ex'))] )
                               );
 
       lCGBeginEndBlockStatement.Statements.Add(lCGIfElseStat);
-      
+
       if meth.IsConstructor then begin
         lCGBeginEndBlockStatement.Statements.Add(new CGAssignmentStatement(new CGNamedIdentifierExpression('__instance'), new CGNamedIdentifierExpression('inst')));
         lCGBeginEndBlockStatement.Statements.Add(new CGReturnStatement(new CGSelfExpression()));
@@ -329,7 +333,7 @@ begin
         if IsListObjectRef(meth.ReturnType, out lArr) then
          lCGBeginEndBlockStatement.Statements.Add(new CGReturnStatement(WrapListObject(new CGNamedIdentifierExpression('res'), GetMarzipanType(
             if meth.ReturnType is GenericInstanceType then
-            GenericInstanceType(meth.ReturnType).GenericArguments[0] else 
+            GenericInstanceType(meth.ReturnType).GenericArguments[0] else
               meth.ReturnType.GetElementType), lArr)))
         else if IsObjectRef(meth.ReturnType) then
           lCGBeginEndBlockStatement.Statements.Add(new CGReturnStatement(WrapObject(new CGNamedIdentifierExpression('res'), GetMarzipanType(meth.ReturnType))))
@@ -379,14 +383,14 @@ begin
     lFType.Type := new CGNamedTypeReference('MZType');
 
     var lCall := new CGMethodCallExpression(new CGMethodCallExpression(new CGNamedIdentifierExpression('MZMonoRuntime'), 'sharedInstance'), 'getType', [new CGCallParameter(new CGStringLiteralExpression(el.Key.FullName+', '+ModuleDefinition(el.Key.Scope).Assembly.Name.Name))]);
-    
+
     lFType.Initializer := lCall;
 
     lType.Members.Add(lFType);
 
     for each elz in lVars do lType.Members.Add(elz);
     lVars.Clear;
-    
+
     for each elz in lMethods.Where(a->a.Visibility = CGMemberVisibilityKind.Private) do lType.Members.Add(elz);
     for each elz in lMethods.Where(a->a.Visibility = CGMemberVisibilityKind.Public) do lType.Members.Add(elz);
     for each elz in lProperties do lType.Members.Add(elz);
@@ -396,7 +400,7 @@ begin
     lGetType.Visibility := CGMemberVisibilityKind.Public;
     lGetType.ReturnType := new CGNamedTypeReference('MZType');
     lGetType.Virtuality := CGMemberVirtualityKind.Override;
-    
+
     var lGetTypeBeginEndStat := new CGBeginEndBlockStatement();
     lGetTypeBeginEndStat.Statements.Add(new CGReturnStatement(new CGNamedIdentifierExpression(lFTypePropertyName)));
     lGetType.Statements.Add(lGetTypeBeginEndStat);
@@ -417,7 +421,7 @@ begin
     end;
 
     fUnit.Types.Insert(n, lTypeDef);
-    
+
   end;
   var lStart := fEnumTypes.Count;
 
@@ -425,7 +429,7 @@ begin
     var lTypeDef := new CGStructTypeDefinition(fImportNameMapping[el.FullName]);
     lTypeDef.Comment := new CGCommentStatement('Import of '+el.FullName+' from '+el.Scope.Name);
     lTypeDef.Visibility := CGTypeVisibilityKind.Public;
-    
+
     for each lConst in el.Fields.Where(a->a.IsStatic = false) do begin
       lTypeDef.Members.Add(
         new CGFieldDefinition(lConst.Name, GetMonoType(lConst.FieldType), Visibility := CGMemberVisibilityKind.Public));
@@ -433,7 +437,7 @@ begin
 
     if not fUnit.Types.Contains(lTypeDef) then
       fUnit.Types.Insert(n + lStart, lTypeDef);
-    
+
   end;
 
   Log('Generating code');
@@ -443,11 +447,11 @@ begin
     CGOxygeneCodeGenerator: Output := '{$HIDE W8}'+Environment.NewLine+Environment.NewLine+Output;
     CGCSharpCodeGenerator: Output := '#pragma hide W8'+Environment.NewLine+Environment.NewLine+Output;
   end;
-  
+
   var lFilename := Path.ChangeExtension(fSettings.OutputFilename, fCodeGenerator.defaultFileExtension);
   File.WriteAllText(lFilename, Output);
   Log('Wrote '+lFilename);
-  
+
   // for ObjC, we gotta emit a second file. We probably should refatcor this logic into CG4
   if fCodeGenerator is CGObjectiveCHCodeGenerator then begin
     var lCodeGenerator2 := new CGObjectiveCMCodeGenerator();
@@ -457,7 +461,7 @@ begin
     File.WriteAllText(lFilename, Output);
     Log('Wrote '+lFilename);
   end;
-    
+
 end;
 
 method Importer.GetMonoType(aType: TypeReference): CGTypeReference;
@@ -491,7 +495,7 @@ begin
       if not fImportNameMapping.ContainsKey(lType.FullName) then
         fImportNameMapping.Add(lType.FullName, lType.Name);
     end;
-    exit new CGNamedTypeReference(lType.Name); 
+    exit new CGNamedTypeReference(lType.Name);
   end;
   if lType.IsValueType and not (lType.IsGenericInstance) and (lType.GenericParameters.Count = 0) then begin
     if not fValueTypes.Contains(lType) Then begin
@@ -513,8 +517,8 @@ begin
   var b: Boolean;
   if aType.IsGenericInstance and IsListObjectRef(aType, out b) then
     exit new CGNamedTypeReference('MZObjectList');
-  if aType.IsArray then begin 
-    if aType.GetElementType.IsValueType then 
+  if aType.IsArray then begin
+    if aType.GetElementType.IsValueType then
       exit new CGNamedTypeReference('MZObject')
     else
       exit new CGNamedTypeReference('MZArray')
@@ -584,8 +588,8 @@ end;
 
 method Importer.WrapObject(aVal: CGExpression; aType: CGTypeReference): CGExpression;
 begin
-  if CGNamedTypeReference(aType):Name = 'NSString' then begin 
-    exit 
+  if CGNamedTypeReference(aType):Name = 'NSString' then begin
+    exit
     new CGMethodCallExpression(new CGNamedIdentifierExpression('MZString'), 'NSStringWithMonoString', [new CGCallParameter(aVal, "")]);
   end;
   exit
@@ -630,12 +634,12 @@ end;
 method Importer.IsListObjectRef(aType: TypeReference; out aArray: Boolean): Boolean;
 begin
   aArray := false;
-  if aType.IsArray then begin 
+  if aType.IsArray then begin
     if not IsObjectRef(aType.GetElementType) then exit false;
     aArray := true;
     exit true;
   end;
-  if aType.IsGenericInstance then 
+  if aType.IsGenericInstance then
     if (aType.GetElementType.FullName = 'System.Collections.Generic.List`1') and IsObjectRef(GenericInstanceType(aType).GenericArguments[0]) then
     exit true;
   exit false;
@@ -645,15 +649,15 @@ method Importer.WrapListObject(aVal: CGExpression; aType: CGTypeReference; aArra
 begin
   var lCondition := new CGUnaryOperatorExpression(new CGAssignedExpression(aVal), CGUnaryOperatorKind.Not);
   var lIfExpression := new CGNilExpression();
-  
+
   var lCGCallParamsList := new List<CGCallParameter>();
-  lCGCallParamsList.Add(new CGCallParameter(new CGTypeCastExpression(aVal, new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'))), 'withMonoInstance')); 
-  lCGCallParamsList.Add(new CGCallParameter(new CGMethodCallExpression(nil, 'typeOf', [new CGCallParameter(new CGTypeReferenceExpression(aType))] ), 'elementType')); 
-  
+  lCGCallParamsList.Add(new CGCallParameter(new CGTypeCastExpression(aVal, new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'))), 'withMonoInstance'));
+  lCGCallParamsList.Add(new CGCallParameter(new CGMethodCallExpression(nil, 'typeOf', [new CGCallParameter(new CGTypeReferenceExpression(aType))] ), 'elementType'));
+
   var lTypeForNewExpr := if aArray then new CGNamedTypeReference('MZArray') else new CGNamedTypeReference('MZObjectList');
 
   var lElseExpression := new CGNewInstanceExpression(lTypeForNewExpr, lCGCallParamsList);
-  
+
   result := new CGIfThenElseExpression(lCondition, lIfExpression, lElseExpression);
 end;
 
