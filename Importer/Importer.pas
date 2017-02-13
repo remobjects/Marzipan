@@ -46,6 +46,7 @@ type
     method GetMarzipanType(aType: TypeReference): CGTypeReference;
     event Log: Action<String> raise;
     property Output: String;
+    property AllowOverloadByName: Boolean := true;
 
     method Run;
   end;
@@ -114,6 +115,7 @@ begin
   var lMethods := new List<CGMemberDefinition>;
 
   var lNames: HashSet<String> := new HashSet<String>;
+  var lSignatures: HashSet<String> := new HashSet<String>;
   var lMethodMap: Dictionary<MethodDefinition, CGMethodDefinition> := new Dictionary<MethodDefinition,CGMethodDefinition>;
   for each el in fTypes.OrderBy(t -> t.Key.FullName) do begin
     Log('Generating type '+el.Key.FullName);
@@ -132,6 +134,7 @@ begin
 
     fUnit.Types.Add(lType);
     lNames.Clear;
+    lSignatures.Clear;
     lMethodMap.Clear;
     for each meth in el.Key.Methods.OrderBy(m -> GetMethodSignature(m)) index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue;
@@ -154,6 +157,7 @@ begin
       lCGFieldDefinition.Static := true;
       lCGFieldDefinition.Visibility := CGMemberVisibilityKind.Private;
 
+      var lSignature := meth.Name;
       for each elpar in meth.Parameters do begin
         var lParamType: CGTypeReference;
         if elpar.ParameterType.IsByReference then
@@ -162,6 +166,7 @@ begin
           lParamType := GetMonoType(elpar.ParameterType);
 
         lMonoSig.Parameters.Add(new CGParameterDefinition('_' + elpar.Name, lParamType));
+        lSignature := lSignature+"+"+lParamType.ToString;
       end;
 
       lMonoSig.Parameters.Add(new CGParameterDefinition('exception', new CGPointerTypeReference(new CGPointerTypeReference(new CGNamedTypeReference('MonoException')))));
@@ -176,15 +181,19 @@ begin
         lMeth.Name := 'init';
         lMeth.ReturnType := new CGPredefinedTypeReference(CGPredefinedTypeKind.Dynamic);
       end;
-      if lNames.Contains(lMeth.Name) then
+
+      if lSignatures.Contains(lSignature) or (lNames.Contains(lMeth.Name) and (not AllowOverloadByName or (lMeth.Name = "init"))) then begin
+        writeLn(lSignature);
         for i: Integer := 2 to Int32.MaxValue -1 do begin
           if not lNames.Contains(lMeth.Name+i) then begin
             lMeth.Name := lMeth.Name+i;
             break;
           end;
-
         end;
+      end;
+
       lNames.Add(lMeth.Name);
+      lSignatures.Add(lSignature);
       lMethods.Add(lMeth);
       lMeth.Static := meth.IsStatic;
 
