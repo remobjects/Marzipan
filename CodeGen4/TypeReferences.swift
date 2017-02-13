@@ -1,8 +1,4 @@
-﻿import Sugar
-import Sugar.Collections
-import Sugar.Linq
-
-/* Type References */
+﻿/* Type References */
 
 public enum CGTypeNullabilityKind {
 	case Unknown
@@ -19,26 +15,26 @@ public __abstract class CGTypeReference : CGEntity {
 	#hint StorageModifier shouldn't really be on the type? refactor!
 	public /*fileprivate*/internal(set) var StorageModifier: CGStorageModifierKind = .Strong
 	public /*fileprivate*/internal(set) var IsClassType = false
-	
-	public lazy var NullableUnwrapped: CGTypeReference	= ActualNullability == CGTypeNullabilityKind.NullableUnwrapped	? self : self.copyWithNullability(CGTypeNullabilityKind.NullableUnwrapped)
+
+	public lazy var NullableUnwrapped: CGTypeReference    = ActualNullability == CGTypeNullabilityKind.NullableUnwrapped    ? self : self.copyWithNullability(CGTypeNullabilityKind.NullableUnwrapped)
 	public lazy var NullableNotUnwrapped: CGTypeReference = ActualNullability == CGTypeNullabilityKind.NullableNotUnwrapped ? self : self.copyWithNullability(CGTypeNullabilityKind.NullableNotUnwrapped)
-	public lazy var NotNullable: CGTypeReference		  = ActualNullability == CGTypeNullabilityKind.NotNullable		  ? self : self.copyWithNullability(CGTypeNullabilityKind.NotNullable)
-	
+	public lazy var NotNullable: CGTypeReference          = ActualNullability == CGTypeNullabilityKind.NotNullable          ? self : self.copyWithNullability(CGTypeNullabilityKind.NotNullable)
+
 	public var ActualNullability: CGTypeNullabilityKind {
 		if Nullability == CGTypeNullabilityKind.Default || Nullability == CGTypeNullabilityKind.Unknown {
 			return DefaultNullability
 		}
 		return Nullability
 	}
-	
-	public var IsVoid: Boolean { 
+
+	public var IsVoid: Boolean {
 		if let predef = self as? CGPredefinedTypeReference {
 			return predef.Kind == CGPredefinedTypeKind.Void
 		}
 		return false
 		//return (self as? CGPredefinedTypeReference)?.Kind == CGPredefinedTypeKind.Void // 71722: Silver: can't compare nullable enum to enum
 	}
-	
+
 	public __abstract func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference
 }
 
@@ -52,7 +48,7 @@ public class CGNamedTypeReference : CGTypeReference {
 	public let Name: String
 	public private(set) var Namespace: CGNamespaceReference?
 	public var GenericArguments: List<CGTypeReference>?
-	
+
 	public var FullName: String {
 		if let namespace = Namespace {
 			return namespace.Name+"."+Name
@@ -100,11 +96,15 @@ public class CGNamedTypeReference : CGTypeReference {
 		result.IsClassType = IsClassType
 		return result
 	}
+
+	@ToString public func ToString() -> String {
+		return "<\(Name)>";
+	}
 }
 
 public class CGPredefinedTypeReference : CGTypeReference {
 	public var Kind: CGPredefinedTypeKind
-	
+
 	//todo:these should become provate and force use of the static members
 	public init(_ kind: CGPredefinedTypeKind) {
 		Kind = kind
@@ -146,11 +146,11 @@ public class CGPredefinedTypeReference : CGTypeReference {
 				DefaultValue = CGNilExpression.Nil
 				DefaultNullability = .NullableUnwrapped
 				IsClassType = true
-			case .Object: 
+			case .Object:
 				DefaultValue = CGNilExpression.Nil
 				DefaultNullability = .NullableUnwrapped
 				IsClassType = true
-			case .Class: 
+			case .Class:
 				DefaultValue = CGNilExpression.Nil
 				DefaultNullability = .NullableUnwrapped
 				IsClassType = true
@@ -169,7 +169,7 @@ public class CGPredefinedTypeReference : CGTypeReference {
 		init(kind)
 		DefaultValue = defaultValue
 	}
-	
+
 	/*public lazy var NullableUnwrapped: CGPredefinedTypeReference = ActualNullability == CGTypeNullabilityKind.NullableUnwrapped ? self : CGPredefinedTypeReference(Kind, nullability: CGTypeNullabilityKind.NullableUnwrapped)
 	public lazy var NullableNotUnwrapped: CGPredefinedTypeReference = ActualNullability == CGTypeNullabilityKind.NullableNotUnwrapped ? self : CGPredefinedTypeReference(Kind, nullability: CGTypeNullabilityKind.NullableNotUnwrapped)
 	public lazy var NotNullable: CGPredefinedTypeReference = ActualNullability == CGTypeNullabilityKind.NotNullable ? self : CGPredefinedTypeReference(Kind, nullability: CGTypeNullabilityKind.NotNullable)*/
@@ -208,6 +208,10 @@ public class CGPredefinedTypeReference : CGTypeReference {
 	public static lazy var Void = CGPredefinedTypeReference(.Void)
 	public static lazy var Object = CGPredefinedTypeReference(.Object)
 	public static lazy var Class = CGPredefinedTypeReference(.Class)
+
+	@ToString public func ToString() -> String {
+		return Kind.ToString();
+	}
 }
 
 public enum CGPredefinedTypeKind {
@@ -241,7 +245,7 @@ public enum CGPredefinedTypeKind {
 public class CGIntegerRangeTypeReference : CGTypeReference {
 	public var Start: Integer
 	public var End: Integer
-	
+
 	init(_ start: Integer, _ end: Integer) {
 		Start = start
 		End = end
@@ -271,6 +275,10 @@ public class CGInlineBlockTypeReference : CGTypeReference {
 		result.IsClassType = IsClassType
 		return result
 	}
+
+	@ToString public func ToString() -> String {
+		return "block";
+	}
 }
 
 public class CGPointerTypeReference : CGTypeReference {
@@ -281,12 +289,12 @@ public class CGPointerTypeReference : CGTypeReference {
 		`Type` = type
 		DefaultNullability = .NullableUnwrapped
 	}
-	
+
 	public convenience init(_ type: CGTypeReference, reference: Boolean) { /* C++ only */
 		init(type)
 		Reference = reference
 	}
-	
+
 	public static lazy var VoidPointer = CGPointerTypeReference(CGPredefinedTypeReference.Void)
 
 	override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
@@ -298,6 +306,10 @@ public class CGPointerTypeReference : CGTypeReference {
 		result.IsClassType = IsClassType
 		result.Reference = Reference
 		return result
+	}
+
+	@ToString public func ToString() -> String {
+		return "<pointer to \(`Type`.ToString())>";
 	}
 }
 
@@ -318,6 +330,10 @@ public class CGConstantTypeReference : CGTypeReference { /* C++ only, currently 
 		result.IsClassType = IsClassType
 		return result
 	}
+
+	@ToString public func ToString() -> String {
+		return "<constant \(`Type`.ToString())>";
+	}
 }
 
 public class CGKindOfTypeReference : CGTypeReference {
@@ -337,11 +353,15 @@ public class CGKindOfTypeReference : CGTypeReference {
 		result.IsClassType = IsClassType
 		return result
 	}
+
+	@ToString public func ToString() -> String {
+		return "<kind of \(`Type`.ToString())>";
+	}
 }
 
 public class CGTupleTypeReference : CGTypeReference {
 	public var Members: List<CGTypeReference>
-	
+
 	public init(_ members: List<CGTypeReference>) {
 		Members = members
 	}
@@ -357,6 +377,10 @@ public class CGTupleTypeReference : CGTypeReference {
 		result.StorageModifier = StorageModifier
 		result.IsClassType = IsClassType
 		return result
+	}
+
+	@ToString public func ToString() -> String {
+		return "<tuple ...)>";
 	}
 }
 
@@ -375,6 +399,10 @@ public class CGSequenceTypeReference : CGTypeReference {
 		result.StorageModifier = StorageModifier
 		result.IsClassType = IsClassType
 		return result
+	}
+
+	@ToString public func ToString() -> String {
+		return "<sequence od \(`Type`.ToString())>";
 	}
 }
 
@@ -415,7 +443,7 @@ public class CGArrayTypeReference : CGTypeReference {
 			Bounds = bounds
 		} else {
 			Bounds = List<CGArrayBounds>()
-		}	
+		}
 	}
 
 	override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
@@ -428,12 +456,16 @@ public class CGArrayTypeReference : CGTypeReference {
 		result.IsClassType = IsClassType
 		return result
 	}
+
+	@ToString public func ToString() -> String {
+		return "<array of \(`Type`.ToString())>";
+	}
 }
 
 public class CGArrayBounds : CGEntity {
 	public var Start: Int32 = 0
 	public var End: Int32?
-	
+
 	public init() {
 	}
 	public init(_ start: Int32, end: Int32) {
@@ -461,5 +493,9 @@ public class CGDictionaryTypeReference : CGTypeReference {
 		result.StorageModifier = StorageModifier
 		result.IsClassType = IsClassType
 		return result
+	}
+
+	@ToString public func ToString() -> String {
+		return "<dinctionary of \(`KeyType`.ToString()):\(`ValueType`.ToString())>";
 	}
 }
