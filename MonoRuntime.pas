@@ -45,12 +45,12 @@ type
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
 
     class property sharedInstance: MZMonoRuntime read get_sharedInstance;
-    
+
     property domain: ^MonoDomain read fDomain;
-    method loadAssembly(aPath: NSString): MZMonoAssembly; 
+    method loadAssembly(aPath: NSString): MZMonoAssembly;
     method getType(aFullName: NSString): MZType;
     method getCoreType(aType: NSString; aAssembly: NSString := 'mscorlib'): MZType;
-    
+
     method attachToThread;
 
     property byte: MZType read byte;
@@ -67,7 +67,7 @@ type
     property uintptr: MZType read uintptr;
     property _char: MZType read _char;
     property boolean: MZType read boolean;
- 
+
     property object: MZType read object;
     property string: MZType read string;
     finalizer;
@@ -88,7 +88,7 @@ type
 
   MZMonoAssembly = public class
   private
-    fAssembly: ^MonoAssembly; 
+    fAssembly: ^MonoAssembly;
     fName: NSString;
     fImage: ^MonoImage;
     method image: ^MonoImage;
@@ -133,7 +133,7 @@ end;
 constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String);
 begin
   if fInstance <> nil then raise new MZException withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
-  if aVersion[0] = 'v' then 
+  if aVersion[0] = 'v' then
     fVersion := aVersion.substringFromIndex(1)
   else
     fVersion := aVersion;
@@ -149,7 +149,7 @@ end;
 constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
 begin
   if fInstance <> nil then raise new MZException  withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
-  if aVersion[0] = 'v' then 
+  if aVersion[0] = 'v' then
     fVersion := aVersion.substringFromIndex(1)
   else
     fVersion := aVersion;
@@ -157,7 +157,7 @@ begin
   if aLibPath <> nil then begin
     mono_set_dirs(aLibPath.UTF8String, aETCPath.UTF8String);
   end;
-  
+
   setupDebugger();
   fDomain := mono_jit_init_version(aAppName.UTF8String, aVersion.UTF8String);
   mono_config_parse(nil);
@@ -186,13 +186,13 @@ end;
 
 method MZMonoRuntime.object: MZType;
 begin
-  if fObject = nil then 
+  if fObject = nil then
     fObject := new MZType withType(mono_get_object_class);
   exit fObject;
 end;
 method MZMonoRuntime.string: MZType;
 begin
-  if fString = nil then 
+  if fString = nil then
     fString := new MZType withType(mono_get_string_class);
   exit fString;
 end;
@@ -238,105 +238,106 @@ begin
   locking self do begin
     result := fTypes.objectForKey(aFullName);
     if result <> nil then exit;
-    var ltmp := mono_reflection_type_from_name(aFullName, nil);
+    var ltmp := mono_reflection_type_from_name(aFullName.UTF8String, nil);
     if ltmp = nil then raise new MZException withName('UnknownType') reason(NSString.stringWithFormat('Could not find type "%@".', aFullName)) userinfo(nil);
     result := new MZType withType(ltmp);
-    fTypes.setObject(result) forKey(aFullName); 
+    fTypes.setObject(result) forKey(aFullName);
   end;
 end;
 
 method MZMonoRuntime.getCoreType(aType: NSString; aAssembly: NSString := 'mscorlib'): MZType;
 begin
-  exit getType(NSString.stringWithFormat('%@, %@, Version=%@, Culture=neutral, PublicKeyToken=b77a5c561934e089', aType, aAssembly, fVersion));
+  //exit getType(NSString.stringWithFormat('%@, %@, Version=%@, Culture=neutral, PublicKeyToken=b77a5c561934e089', aType, aAssembly, fVersion));
+  exit getType(NSString.stringWithFormat('%@, %@', aType, aAssembly));
 end;
 
 method MZMonoRuntime.boolean: MZType;
 begin
-  if fboolean = nil then 
+  if fboolean = nil then
     fboolean := new MZType withType(mono_get_boolean_class);
   exit fboolean;
 end;
 
 method MZMonoRuntime.byte: MZType;
 begin
-  if fbyte = nil then 
+  if fbyte = nil then
     fbyte := new MZType withType(mono_get_byte_class);
   exit fbyte;
 end;
 
 method MZMonoRuntime.sbyte: MZType;
 begin
-  if fsbyte = nil then 
+  if fsbyte = nil then
     fsbyte := new MZType withType(mono_get_sbyte_class);
   exit fsbyte;
 end;
 
 method MZMonoRuntime.int16: MZType;
 begin
-  if fint16 = nil then 
+  if fint16 = nil then
     fint16 := new MZType withType(mono_get_int16_class);
   exit fint16;
 end;
 
 method MZMonoRuntime.uint16: MZType;
 begin
-  if fuint16 = nil then 
+  if fuint16 = nil then
     fuint16 := new MZType withType(mono_get_uint16_class);
   exit fuint16;
 end;
 
 method MZMonoRuntime.int32: MZType;
 begin
-  if fint32 = nil then 
+  if fint32 = nil then
     fint32 := new MZType withType(mono_get_int32_class);
   exit fint32;
 end;
 
 method MZMonoRuntime.uint32: MZType;
 begin
-  if fuint32 = nil then 
+  if fuint32 = nil then
     fuint32 := new MZType withType(mono_get_uint32_class);
   exit fuint32;
 end;
 
 method MZMonoRuntime.int64: MZType;
 begin
-  if fint64 = nil then 
+  if fint64 = nil then
     fint64 := new MZType withType(mono_get_int64_class);
   exit fint64;
 end;
 
 method MZMonoRuntime.uint64: MZType;
 begin
-  if fuint64 = nil then 
+  if fuint64 = nil then
     fuint64 := new MZType withType(mono_get_uint64_class);
   exit fuint64;
 end;
 
 method MZMonoRuntime.single: MZType;
 begin
-  if fsingle = nil then 
+  if fsingle = nil then
     fsingle := new MZType withType(mono_get_single_class);
   exit fsingle;
 end;
 
 method MZMonoRuntime._double: MZType;
 begin
-  if fdouble = nil then 
+  if fdouble = nil then
     fdouble := new MZType withType(mono_get_double_class);
   exit fdouble;
 end;
 
 method MZMonoRuntime.intptr: MZType;
 begin
-  if fintptr = nil then 
+  if fintptr = nil then
     fintptr := new MZType withType(mono_get_intptr_class);
   exit fintptr;
 end;
 
 method MZMonoRuntime.uintptr: MZType;
 begin
-  if fuintptr = nil then 
+  if fuintptr = nil then
     fuintptr := new MZType withType(mono_get_uintptr_class);
   exit fuintptr;
 end;
@@ -355,7 +356,7 @@ end;
 
 method MZMonoAssembly.image: ^MonoImage;
 begin
-  if fImage = nil then 
+  if fImage = nil then
     fImage := mono_assembly_get_image(fAssembly);
   exit fImage;
 end;
@@ -411,9 +412,9 @@ class method MZObject.raiseException(aEx: ^MonoException);
 begin
   var mcs := mono_object_to_string(^MonoObject(aEx), nil);
   var lMsg: NSString := 'Exception';
-  if mcs <> nil then 
+  if mcs <> nil then
     lMsg := NSString.stringWithCharacters(^unichar(mono_string_chars(mcs))) length(mono_string_length(mcs));
-  
+
   raise new MZException withName('Exception') reason(lMsg) userInfo(nil);
 end;
 
@@ -451,7 +452,7 @@ begin
   var lSec := mono_method_desc_new(aSig.UTF8String, 1);
   result := mono_method_desc_search_in_class(lSec, mono_class_from_mono_type(fType));
   mono_method_desc_free(lSec);
-  if result = nil then begin 
+  if result = nil then begin
     {$IFDEF DEBUG}
     var cl := mono_class_from_mono_type(fType);
     var iter: ^Void := nil;
