@@ -603,7 +603,7 @@ begin
   end;
   exit
   new CGIfThenElseExpression(new CGUnaryOperatorExpression(new CGAssignedExpression(aVal), CGUnaryOperatorKind.Not),
-                            new CGNilExpression(), new CGNewInstanceExpression(aType, [new CGCallParameter(new CGTypeCastExpression(aVal, new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'))), 'withMonoInstance')])
+                            new CGNilExpression(), new CGNewInstanceExpression(aType, [new CGCallParameter(new CGTypeCastExpression(aVal, new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'))))], ConstructorName := 'withMonoInstance')
   );
 
 end;
