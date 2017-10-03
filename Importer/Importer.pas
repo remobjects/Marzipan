@@ -665,7 +665,7 @@ begin
 
   var lTypeForNewExpr := if aArray then new CGNamedTypeReference('MZArray') else new CGNamedTypeReference('MZObjectList');
 
-  var lElseExpression := new CGNewInstanceExpression(lTypeForNewExpr, lCGCallParamsList);
+  var lElseExpression := new CGNewInstanceExpression(lTypeForNewExpr, lCGCallParamsList, ConstructorName := 'WithMonoInstance');
 
   result := new CGIfThenElseExpression(lCondition, lIfExpression, lElseExpression);
 end;
