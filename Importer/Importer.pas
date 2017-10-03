@@ -27,6 +27,7 @@ type
     fLibraries: List<ModuleDefinition> := new List<ModuleDefinition>;
     fTypes: Dictionary<TypeDefinition, String> := new Dictionary<TypeDefinition, String>;
     fImportNameMapping: Dictionary<String, String> := new Dictionary<String,String>;
+    fReservedCocoaMemberNames := new List<String>();
     fEnumTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
     fValueTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
     fPaths: HashSet<String> := new HashSet<String>;
@@ -73,6 +74,8 @@ begin
   fImportNameMapping.Add('System.Single', 'float');
   fImportNameMapping.Add('System.Double', 'double');
   fImportNameMapping.Add('System.Boolean', 'Boolean');
+
+  fReservedCocoaMemberNames.Add("description");
 end;
 
 method Importer.Run;
@@ -173,7 +176,7 @@ begin
 
       lVars.Add(lCGFieldDefinition);
 
-      var lMeth := new CGMethodDefinition(meth.Name);
+      var lMeth := new CGMethodDefinition(if fReservedCocoaMemberNames.Contains(meth.Name.ToLowerInvariant()) then meth.Name+"_" else meth.Name);
       lMeth.Visibility := CGMemberVisibilityKind.Public;
       lMethodMap[meth] := lMeth;
       lMeth.ReturnType := GetMarzipanType(meth.ReturnType);
@@ -356,7 +359,8 @@ begin
 
     for each prop in el.Key.Properties.OrderBy(p -> p.Name) do begin
       if not (((prop.GetMethod <> nil) and (prop.GetMethod.IsPublic)) or ((prop.SetMethod <> nil) and (prop.SetMethod.IsPublic)))then continue;
-      var lProp := new CGPropertyDefinition(prop.Name);
+      var lName := if fReservedCocoaMemberNames.Contains(prop.Name.ToLowerInvariant()) then prop.Name+"_" else prop.Name;
+      var lProp := new CGPropertyDefinition(lName);
       if coalesce(prop.GetMethod, prop.SetMethod).IsStatic then
         lProp.Static := true;
       lProp.Visibility := CGMemberVisibilityKind.Public;
@@ -367,9 +371,9 @@ begin
       if prop.GetMethod <> nil then begin
         var lMeth := lMethodMap[prop.GetMethod];
         lMeth.Visibility := CGMemberVisibilityKind.Private;
-        lMeth.Name := prop.Name;
+        lMeth.Name := /*"get"+*/lName;
 
-        lProp.GetExpression := new CGNamedIdentifierExpression(prop.Name);
+        lProp.GetExpression := new CGNamedIdentifierExpression(/*"get"+*/lName);
       end;
 
       if (prop.SetMethod <> nil) and (prop.SetMethod.IsPublic) then begin
@@ -378,7 +382,7 @@ begin
         // move to top
         lMeth.Name := 'set'+prop.Name;
 
-        lProp.SetExpression := new CGNamedIdentifierExpression('set' + prop.Name);
+        lProp.SetExpression := new CGNamedIdentifierExpression('set'+prop.Name);
       end;
       lProperties.Add(lProp);
     end;
