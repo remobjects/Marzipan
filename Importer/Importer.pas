@@ -537,10 +537,11 @@ begin
     exit new CGNamedTypeReference(lType.Name);
   end;
   if lType.IsValueType then begin
-    if not fValueTypes.Contains(lType) Then begin
-      fValueTypes.Add(lType);
-      if not fImportNameMapping.ContainsKey(lType.FullName) then
-        fImportNameMapping.Add(lType.FullName, GetTypeName(lType));
+    if not fImportNameMapping.ContainsKey(lType.FullName) then begin
+      fImportNameMapping.Add(lType.FullName, GetTypeName(lType));
+      if not fValueTypes.Contains(lType) Then begin
+        fValueTypes.Add(lType);
+      end;
     end;
     exit new CGNamedTypeReference(GetTypeName(lType));
   end;
