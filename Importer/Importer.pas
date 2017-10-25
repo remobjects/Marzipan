@@ -16,6 +16,32 @@ uses
 type
   Importer = public class(IAssemblyResolver)
   private
+    class method GetTypeName(aTR: TypeReference): String;
+    begin
+      if aTR is GenericInstanceType then 
+        exit aTR.Name.Replace('`', '')+'_'+String.Join('__', GenericInstanceType(aTR).GenericArguments.Select(a -> a.Name));
+      exit aTR.Name;
+    end;
+
+    class method FixType(aGI: TypeReference; aType: TypeReference): TypeReference;
+    begin
+      if aType is GenericParameter then 
+        exit GenericInstanceType(aGI).GenericArguments[GenericParameter(aType).Position];
+      exit aType;
+    end;
+
+    method Resolve(aType: TypeReference): TypeReference;
+    begin
+      if aType is GenericInstanceType then begin
+        var lGI := new GenericInstanceType(aType.Resolve);
+        for each el in GenericInstanceType(aType) .GenericArguments do 
+          lGI.GenericArguments.Add(Resolve(el));
+        exit lGI;
+      end;
+
+      exit aType.Resolve;
+    end;
+
     method LoadAsm(el: String): ModuleDefinition;
     method IsListObjectRef(aType: TypeReference; out aArray: Boolean): Boolean;
     method WrapListObject(aVal: CGExpression; aType: CGTypeReference; aArray: Boolean): CGExpression;
@@ -29,7 +55,7 @@ type
     fImportNameMapping: Dictionary<String, String> := new Dictionary<String,String>;
     fReservedCocoaMemberNames := new List<String>();
     fEnumTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
-    fValueTypes: HashSet<TypeDefinition> := new HashSet<TypeDefinition>;
+    fValueTypes: HashSet<TypeReference> := new HashSet<TypeReference>();
     fPaths: HashSet<String> := new HashSet<String>;
     fLoaded: Dictionary<String, ModuleDefinition> := new Dictionary<String,ModuleDefinition>;
     fUnit: CGCodeUnit;
@@ -141,8 +167,8 @@ begin
     lMethodMap.Clear;
     for each meth in el.Key.Methods.OrderBy(m -> GetMethodSignature(m)) index n do begin
       if (meth.GenericParameters.Count > 0) or (meth.IsSpecialName and meth.Name.StartsWith('op_')) or (meth.IsConstructor and meth.IsStatic) then continue;
-      if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
-      if meth.Parameters.Any(a->a.ParameterType.IsGenericInstance and a.ParameterType.IsValueType) then continue;
+      //if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
+      //if meth.Parameters.Any(a->a.ParameterType.IsGenericInstance and a.ParameterType.IsValueType) then continue;
       if not meth.IsPublic then continue;
 
       var lMonoSig := new CGBlockTypeDefinition('');
@@ -164,7 +190,7 @@ begin
       for each elpar in meth.Parameters do begin
         var lParamType: CGTypeReference;
         if elpar.ParameterType.IsByReference then
-          lParamType := new CGPointerTypeReference( GetMonoType(elpar.ParameterType.GetElementType))
+          lParamType := new CGPointerTypeReference( GetMonoType(ByReferenceType(elpar.ParameterType).ElementType))
         else
           lParamType := GetMonoType(elpar.ParameterType);
 
@@ -443,9 +469,9 @@ begin
     lTypeDef.Comment := new CGCommentStatement('Import of '+el.FullName+' from '+el.Scope.Name);
     lTypeDef.Visibility := CGTypeVisibilityKind.Public;
 
-    for each lConst in el.Fields.Where(a->a.IsStatic = false) do begin
+    for each lConst in el.Resolve.Fields.Where(a->a.IsStatic = false) do begin
       lTypeDef.Members.Add(
-        new CGFieldDefinition(lConst.Name, GetMonoType(lConst.FieldType), Visibility := CGMemberVisibilityKind.Public));
+        new CGFieldDefinition(lConst.Name, GetMonoType(FixType(el, lConst.FieldType)), Visibility := CGMemberVisibilityKind.Public));
     end;
 
     if not fUnit.Types.Contains(lTypeDef) then
@@ -501,22 +527,22 @@ begin
     'System.IntPtr': exit new CGNamedTypeReference('intptr_t');
     'System.UIntPtr': exit new CGNamedTypeReference('uintptr_t');
   end;
-  var lType := aType.Resolve;
-  if lType.IsEnum then begin
-    if not fEnumTypes.Contains(lType) then begin
-      fEnumTypes.Add(lType);
+  var lType := Resolve(aType);
+  if lType.Resolve.IsEnum then begin
+    if not fEnumTypes.Contains(lType.Resolve) then begin
+      fEnumTypes.Add(lType.Resolve);
       if not fImportNameMapping.ContainsKey(lType.FullName) then
         fImportNameMapping.Add(lType.FullName, lType.Name);
     end;
     exit new CGNamedTypeReference(lType.Name);
   end;
-  if lType.IsValueType and not (lType.IsGenericInstance) and (lType.GenericParameters.Count = 0) then begin
+  if lType.IsValueType then begin
     if not fValueTypes.Contains(lType) Then begin
       fValueTypes.Add(lType);
       if not fImportNameMapping.ContainsKey(lType.FullName) then
-        fImportNameMapping.Add(lType.FullName, lType.Name);
+        fImportNameMapping.Add(lType.FullName, GetTypeName(lType));
     end;
-    exit new CGNamedTypeReference(lType.Name);
+    exit new CGNamedTypeReference(GetTypeName(lType));
   end;
   exit new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'));
 end;
@@ -637,6 +663,8 @@ begin
     MetadataType.GenericInstance: exit SigTypeToString(GenericInstanceType(aType).ElementType)+'<'+String.Join(',', GenericInstanceType(aType).GenericArguments.Select(a -> SigTypeToString(a)).ToArray)+'>';
     MetadataType.Object: exit 'object';
     MetadataType.String: exit 'string';
+    MetadataType.Var,
+    MetadataType.MVar,
     MetadataType.Class,
     MetadataType.ValueType: exit aType.ToString;
    else
