@@ -368,7 +368,7 @@ begin
         lProp.Parameters.Add(new CGParameterDefinition(elz.Name, GetMarzipanType(elz.ParameterType)));
 
       lProp.Type := GetMarzipanType(prop.PropertyType);
-      if prop.GetMethod <> nil then begin
+      if assigned(prop.GetMethod) and lMethodMap.ContainsKey(prop.GetMethod) then begin
         var lMeth := lMethodMap[prop.GetMethod];
         lMeth.Visibility := CGMemberVisibilityKind.Private;
         lMeth.Name := /*"get"+*/lName;
@@ -376,7 +376,7 @@ begin
         lProp.GetExpression := new CGNamedIdentifierExpression(/*"get"+*/lName);
       end;
 
-      if (prop.SetMethod <> nil) and (prop.SetMethod.IsPublic) then begin
+      if assigned(prop.SetMethod) and (prop.SetMethod.IsPublic) and lMethodMap.ContainsKey(prop.SetMethod) then begin
         var lMeth := lMethodMap[prop.SetMethod];
         lMeth.Visibility := CGMemberVisibilityKind.Private;
         // move to top
