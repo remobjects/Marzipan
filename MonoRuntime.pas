@@ -46,6 +46,8 @@ type
 
     class property sharedInstance: MZMonoRuntime read get_sharedInstance;
 
+    property version: String read fVersion;
+
     property domain: ^MonoDomain read fDomain;
     method loadAssembly(aPath: NSString): MZMonoAssembly;
     method getType(aFullName: NSString): MZType;
