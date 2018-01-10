@@ -18,14 +18,14 @@ type
   private
     class method GetTypeName(aTR: TypeReference): String;
     begin
-      if aTR is GenericInstanceType then 
+      if aTR is GenericInstanceType then
         exit aTR.Name.Replace('`', '')+'_'+String.Join('__', GenericInstanceType(aTR).GenericArguments.Select(a -> a.Name));
       exit aTR.Name;
     end;
 
     class method FixType(aGI: TypeReference; aType: TypeReference): TypeReference;
     begin
-      if aType is GenericParameter then 
+      if aType is GenericParameter then
         exit GenericInstanceType(aGI).GenericArguments[GenericParameter(aType).Position];
       exit aType;
     end;
@@ -34,7 +34,7 @@ type
     begin
       if aType is GenericInstanceType then begin
         var lGI := new GenericInstanceType(aType.Resolve);
-        for each el in GenericInstanceType(aType) .GenericArguments do 
+        for each el in GenericInstanceType(aType) .GenericArguments do
           lGI.GenericArguments.Add(Resolve(el));
         exit lGI;
       end;
