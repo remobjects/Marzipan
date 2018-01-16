@@ -506,7 +506,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateDestroyInstanceExpression(_ expression: CGDestroyInstanceExpression) {
-		#hint cover 'delete [] a' case
+		//#hint cover 'delete [] a' case
 		// problem with deleting arrays:
 		// int * a = new int[500];
 		// delete [] a;
@@ -630,7 +630,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 	// Type Definitions
 	//
 
-	override func generateAttribute(_ attribute: CGAttribute) {
+	override func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		// no-op, we dont support attribtes in Objective-C
 	}
 
@@ -736,10 +736,10 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	func cppGenerateMethodDefinitionHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, header: Boolean) {
-		let isCtor = (method as? CGConstructorDefinition) != nil;
-		let isDtor = (method as? CGDestructorDefinition) != nil;
-		let isInterface = (type as? CGInterfaceTypeDefinition) != nil;
-		let isGlobal = type == CGGlobalTypeDefinition.GlobalType;
+		let isCtor = (method as? CGConstructorDefinition) != nil
+		let isDtor = (method as? CGDestructorDefinition) != nil
+		let isInterface = (type as? CGInterfaceTypeDefinition) != nil
+		let isGlobal = type is CGGlobalTypeDefinition
 		if header {
 			if method.Static {
 				if isCBuilder()    {
@@ -1037,5 +1037,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 		if type.Reference {
 			Append("&")
 		}        else {
-			Append("*")        }    }
+			Append("*")
+		}
+	}
 }

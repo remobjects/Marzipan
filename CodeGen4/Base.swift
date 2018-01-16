@@ -60,6 +60,7 @@ public class CGCompilerDirective {
 public class CGImport {
 	public var Namespace: CGNamespaceReference?
 	public var StaticClass: CGNamedTypeReference?
+	public var Condition: CGConditionalDefine?
 
 	public var Name: String! {
 		if let ns = Namespace {
@@ -113,7 +114,7 @@ public __abstract class CGGlobalDefinition {
 }
 
 public class CGGlobalFunctionDefinition : CGGlobalDefinition {
-	public var Function: CGMethodDefinition
+	public let Function: CGMethodDefinition
 
 	public init(_ function: CGMethodDefinition) {
 		Function = function
@@ -121,9 +122,17 @@ public class CGGlobalFunctionDefinition : CGGlobalDefinition {
 }
 
 public class CGGlobalVariableDefinition : CGGlobalDefinition {
-	public var Variable: CGFieldDefinition
+	public let Variable: CGFieldDefinition
 
 	public init(_ variable: CGFieldDefinition) {
 		Variable = variable
+	}
+}
+
+public class CGGlobalPropertyDefinition : CGGlobalDefinition {
+	public let Property: CGPropertyDefinition
+
+	public init(_ property: CGPropertyDefinition) {
+		Property = property
 	}
 }

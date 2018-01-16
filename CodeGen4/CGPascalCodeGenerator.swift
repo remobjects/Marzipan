@@ -147,6 +147,10 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		else if let global = global as? CGGlobalVariableDefinition {
 			// skip global variables
 		}
+		else if let global = global as? CGGlobalPropertyDefinition {
+			// skip global properties
+			Append("// global proerties are not supported.")
+		}
 		else {
 			assert(false, "unsupported global found: \(typeOf(global).ToString())")
 		}
@@ -166,12 +170,24 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			AppendLine("uses")
 			incIndent()
 			for i in 0 ..< imports.Count {
+				if let condition = imports[i].Condition {
+					if i == imports.Count-1 {
+						assert(false, "Condition not allowed on last import, for Pascal");
+					}
+					generateConditionStart(condition, inline: true)
+				}
+
 				generateIdentifier(imports[i].Name, alwaysEmitNamespace: true)
 				if i < imports.Count-1 {
-					AppendLine(",")
+					Append(",")
 				} else {
-					generateStatementTerminator()
+					Append(";")
 				}
+
+				if let condition = imports[i].Condition {
+					generateConditionEnd(condition, inline: true)
+				}
+				AppendLine()
 			}
 			AppendLine()
 			decIndent()
@@ -186,18 +202,39 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	// Statements
 	//
 
-	override func generateConditionStart(_ condition: CGConditionalDefine) {
+	final override func generateConditionStart(_ condition: CGConditionalDefine) {
+		generateConditionStart(condition, inline: false);
+	}
+
+	final override func generateConditionElse() {
+		generateConditionElse(inline: false);
+	}
+
+	final override func generateConditionEnd(_ condition: CGConditionalDefine) {
+		generateConditionEnd(condition, inline: false);
+	}
+
+	func generateConditionStart(_ condition: CGConditionalDefine, inline: Boolean) {
 		Append("{$IF ")
 		generateConditionalDefine(condition) // Oxygene is easier than plain Pascal here
-		AppendLine("}")
+		Append("}")
+		if (!inline) {
+			AppendLine()
+		}
 	}
 
-	override func generateConditionElse() {
-		AppendLine("{$ELSE}")
+	func generateConditionElse(inline: Boolean) {
+		Append("{$ELSE}")
+		if (!inline) {
+			AppendLine()
+		}
 	}
 
-	override func generateConditionEnd(_ condition: CGConditionalDefine) {
-		AppendLine("{$ENDIF}")
+	func generateConditionEnd(_ condition: CGConditionalDefine, inline: Boolean) {
+		Append("{$ENDIF}")
+		if (!inline) {
+			AppendLine()
+		}
 	}
 
 	override func generateBeginEndStatement(_ statement: CGBeginEndBlockStatement) {
@@ -526,7 +563,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			} else {
 				AppendLine("begin")
 				incIndent()
-				generateStatements(method.LocalVariables)
+				generateStatements(variables: method.LocalVariables)
 				generateStatementsSkippingOuterBeginEndBlock(method.Statements)
 				decIndent()
 				Append("end")
@@ -551,7 +588,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			}
 			AppendLine(" begin")
 			incIndent()
-			generateStatements(method.LocalVariables)
+			generateStatements(variables: method.LocalVariables)
 			generateStatementsSkippingOuterBeginEndBlock(method.Statements)
 			decIndent()
 			Append("end")
@@ -633,8 +670,8 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		assert(false, "generateIfThenElseExpression is not supported in base Pascal, only Oxygene")
 	}
 
-	internal func pascalGenerateStorageModifierPrefix(_ type: CGTypeReference) {
-		switch type.StorageModifier {
+	internal func pascalGenerateStorageModifierPrefixIfNeeded(_ storageModifier: CGStorageModifierKind) {
+		switch storageModifier {
 			case .Strong: break
 			case .Weak: Append("weak ")
 			case .Unretained: Append("unretained ")
@@ -655,31 +692,26 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	}
 
 	func pascalGenerateCallParameters(_ parameters: List<CGCallParameter>) {
-		for p in 0 ..< parameters.Count {
-			let param = parameters[p]
-			if p > 0 {
-				Append(", ")
-			}
-			generateExpression(param.Value)
+		helpGenerateCommaSeparatedList(parameters) { param in
+			self.generateExpression(param.Value)
 		}
 	}
 
 	func pascalGenerateAttributeParameters(_ parameters: List<CGCallParameter>) {
-		for p in 0 ..< parameters.Count {
-			let param = parameters[p]
-			if p > 0 {
-				Append(", ")
-			}
+		helpGenerateCommaSeparatedList(parameters) { param in
 			if let name = param.Name {
-				generateIdentifier(name)
-				Append(" := ")
+				self.generateIdentifier(name)
+				self.Append(" := ")
 			}
-			generateExpression(param.Value)
+			self.generateExpression(param.Value)
 		}
 	}
 
-	func pascalGenerateDefinitionParameters(_ parameters: List<CGParameterDefinition>) {
+	func pascalGenerateDefinitionParameters(_ parameters: List<CGParameterDefinition>, implementation: Boolean) {
 		helpGenerateCommaSeparatedList(parameters, separator: { self.Append("; ") }) { param in
+			if !implementation {
+				self.generateAttributes(param.Attributes, inline: true)
+			}
 			if let exp = param.`Type` as? CGConstantTypeReference {
 				self.Append("const ")
 			}
@@ -721,10 +753,18 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	func pascalGenerateGenericConstraints(_ parameters: List<CGGenericParameterDefinition>?, needSemicolon: Boolean = false) {
 		if let parameters = parameters, parameters.Count > 0 {
 			var needsWhere = true
-			helpGenerateCommaSeparatedList(parameters) { param in
+			var addedAny = false
+			var lastParamHadConstraints = false
+			helpGenerateCommaSeparatedList(parameters, separator: {
+				if lastParamHadConstraints {
+					self.Append(", ")
+				}
+				lastParamHadConstraints = false
+			}) { param in
 				if let constraints = param.Constraints, constraints.Count > 0 {
+					lastParamHadConstraints = true
 					if needsWhere {
-						self.Append(", ")
+						self.Append(" where ")
 						needsWhere = false
 					} else {
 						self.Append(", ")
@@ -734,20 +774,22 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 						if let constraint = constraint as? CGGenericHasConstructorConstraint {
 							self.Append(" has constructor")
 						//todo: 72051: Silver: after "if let x = x as? Foo", x still has the less concrete type. Sometimes.
-						} else if let constraint2 = constraint as? CGGenericIsSpecificTypeConstraint {
+						} else if let constraint = constraint as? CGGenericIsSpecificTypeConstraint {
 							self.Append(" is ")
-							self.generateTypeReference(constraint2.`Type`)
-						} else if let constraint2 = constraint as? CGGenericIsSpecificTypeKindConstraint {
-							switch constraint2.Kind {
+							self.generateTypeReference(constraint.`Type`)
+						} else if let constraint = constraint as? CGGenericIsSpecificTypeKindConstraint {
+							switch constraint.Kind {
 								case .Class: self.Append(" is class")
 								case .Struct: self.Append(" is record")
 								case .Interface: self.Append(" is interface")
 							}
+						} else {
+							assert(false, "Unsupported constraint type \(constraint)")
 						}
 					}
 				}
 			}
-			if needSemicolon {
+			if needSemicolon && addedAny {
 				Append(";")
 			}
 		}
@@ -823,16 +865,35 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		}
 	}
 
-	internal func pascalEscapeCharactersInStringLiteral(_ string: String, quoteChar: Char) -> String {
-		let result = StringBuilder()
+	internal func AppendPascalEscapeCharactersInStringLiteral(_ string: String, quoteChar: Char) {
 		let len = string.Length
 
 		if len == 0 {
-			return quoteChar+quoteChar
+			Append(quoteChar+quoteChar)
+			return;
+		}
+
+		var startLocation = lastStartLocation ?? currentLocation.virtualColumn
+		if startLocation > Integer(Double(splitLinesLongerThan)*0.75) {
+			startLocation = Integer(Double(splitLinesLongerThan)*0.75)
+			if currentLocation.virtualColumn > splitLinesLongerThan-Math.Min(10,length(string)) {
+				AppendLine()
+				AppendIndentToVirtualColumn(startLocation)
+			}
 		}
 
 		var inQuotes = false
 		for i in 0 ..< len {
+
+			if i > 0 && currentLocation.virtualColumn > splitLinesLongerThan {
+				if inQuotes {
+					Append(quoteChar)
+					inQuotes = false
+				}
+				AppendLine("+")
+				AppendIndentToVirtualColumn(startLocation)
+			}
+
 			let ch = string[i]
 			switch ch as! UInt16 {
 				case 32...127:
@@ -840,26 +901,25 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 						fallthrough
 					}
 					if !inQuotes {
-						result.Append(quoteChar)
+						Append(quoteChar)
 						inQuotes = true
 					}
-					result.Append(ch)
+					Append(ch)
 				default:
 					if inQuotes {
-						result.Append(quoteChar)
+						Append(quoteChar)
 						inQuotes = false
 					}
-					result.Append("#\(ch  as! UInt32)")
+					Append("#\(ch  as! UInt32)")
 			}
 		}
 		if inQuotes {
-			result.Append(quoteChar)
+			Append(quoteChar)
 		}
-		return result.ToString()
 	}
 
 	override func generateStringLiteralExpression(_ expression: CGStringLiteralExpression) {
-		Append(pascalEscapeCharactersInStringLiteral(expression.Value, quoteChar: "'"))
+		AppendPascalEscapeCharactersInStringLiteral(expression.Value, quoteChar: "'")
 	}
 
 	override func generateCharacterLiteralExpression(_ expression: CGCharacterLiteralExpression) {
@@ -904,7 +964,28 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	// Type Definitions
 	//
 
-	override func generateAttribute(_ attribute: CGAttribute) {
+	override func generateAttributes(_ attributes: List<CGAttribute>?, inline: Boolean) {
+		var lastCondition: CGConditionalDefine? = nil
+		if let attributes = attributes, attributes.Count > 0 {
+			for a in attributes {
+				if a.Condition?.Expression != lastCondition?.Expression {
+					if let condition = lastCondition {
+						generateConditionEnd(condition, inline: inline)
+					}
+					lastCondition = a.Condition
+					if let condition = a.Condition {
+						generateConditionStart(condition, inline: inline)
+					}
+				}
+				generateAttribute(a, inline: inline)
+			}
+			if let condition = lastCondition {
+				generateConditionEnd(condition, inline: inline)
+			}
+		}
+	}
+
+	override func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		Append("[")
 		generateTypeReference(attribute.`Type`)
 		if let parameters = attribute.Parameters, parameters.Count > 0 {
@@ -913,11 +994,20 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			Append(")")
 		}
 		Append("]")
-		if let comment = attribute.Comment {
+		if inline {
+			if let comment = attribute.Comment {
+				Append(" { ")
+				AppendLine(comment.Comment?.Replace("}", ")"))
+				Append(" }")
+			}
 			Append(" ")
-			generateSingleLineCommentStatement(comment)
 		} else {
-			AppendLine()
+			if let comment = attribute.Comment {
+				Append(" ")
+				generateSingleLineCommentStatement(comment)
+			} else {
+				AppendLine()
+			}
 		}
 	}
 
@@ -1148,7 +1238,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			//case .None
 			case .Virtual: Append(" virtual;")
 			case .Abstract: Append(" virtual; abstract;")
-			case .Override: Append(" override; ")
+			case .Override: Append(" override;")
 			//case .Final: /* Oxygene only*/
 			case .Reintroduce: Append(" reintroduce;")
 			default:
@@ -1162,7 +1252,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	internal func pascalGenerateSecondHalfOfMethodHeader(_ method: CGMethodLikeMemberDefinition, implementation: Boolean, includeVisibility: Boolean = false) {
 		if let parameters = method.Parameters, parameters.Count > 0 {
 			Append("(")
-			pascalGenerateDefinitionParameters(parameters)
+			pascalGenerateDefinitionParameters(parameters, implementation: implementation)
 			Append(")")
 		}
 		if let returnType = method.ReturnType, !returnType.IsVoid {
@@ -1394,28 +1484,28 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		// no-op
 	}
 
-	override func generateFieldDefinition(_ variable: CGFieldDefinition, type: CGTypeDefinition) {
-		if variable.Static {
+	override func generateFieldDefinition(_ field: CGFieldDefinition, type: CGTypeDefinition) {
+		if field.Static {
 			Append("class ")
 		}
-		if variable.Constant, let initializer = variable.Initializer {
+		if field.Constant, let initializer = field.Initializer {
 			Append("const ")
-			generateIdentifier(variable.Name)
-			if let type = variable.`Type` {
+			generateIdentifier(field.Name)
+			if let type = field.`Type` {
 				Append(": ")
+				pascalGenerateStorageModifierPrefixIfNeeded(field.StorageModifier)
 				generateTypeReference(type)
 			}
 			Append(" = ")
 			generateExpression(initializer)
 		} else {
 			Append("var ")
-			generateIdentifier(variable.Name)
-			if let type = variable.`Type` {
+			generateIdentifier(field.Name)
+			if let type = field.`Type` {
 				Append(": ")
-				pascalGenerateStorageModifierPrefix(type)
 				generateTypeReference(type)
 			}
-			if let initializer = variable.Initializer { // todo: Oxygene only?
+			if let initializer = field.Initializer { // todo: Oxygene only?
 				Append(" := ")
 				generateExpression(initializer)
 			}
@@ -1423,7 +1513,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 
 		if isUnified {
 			Append("; ")
-			pascalGenerateMemberVisibilityKeyword(variable.Visibility)
+			pascalGenerateMemberVisibilityKeyword(field.Visibility)
 		}
 		generateStatementTerminator()
 	}
@@ -1436,12 +1526,12 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		generateIdentifier(property.Name)
 		if let parameters = property.Parameters, parameters.Count > 0 {
 			Append("[")
-			pascalGenerateDefinitionParameters(parameters)
+			pascalGenerateDefinitionParameters(parameters, implementation: false)
 			Append("]")
 		}
 		if let type = property.`Type` {
 			Append(": ")
-			pascalGenerateStorageModifierPrefix(type)
+			pascalGenerateStorageModifierPrefixIfNeeded(property.StorageModifier)
 			generateTypeReference(type)
 		}
 

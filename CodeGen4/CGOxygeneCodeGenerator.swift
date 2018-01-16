@@ -26,7 +26,7 @@
 					"has",
 					"if", "implementation", "implements", "implies", "in", "index", "inherited", "inline", "interface", "invariants", "is", "iterator",
 					"join",
-					"lazy", "locked", "locking", "loop",
+					"lazy", "lifetimestrategy", "locked", "locking", "loop",
 					"mapped", "matching", "method", "mod", "module", "namespace",
 					"nested", "new", "nil", "not", "notify", "nullable",
 					"of", "old", "on", "operator", "optional", "or", "order", "out", "override",
@@ -193,7 +193,7 @@
 				self.Append("method ")
 				if member.Parameters.Count > 0 {
 					self.Append("(")
-					self.pascalGenerateDefinitionParameters(member.Parameters)
+					self.pascalGenerateDefinitionParameters(member.Parameters, implementation: false)
 					self.Append(")")
 				}
 				if let returnType = member.ReturnType {
@@ -260,7 +260,7 @@
 					Append(", ")
 				}
 			}
-			switch parameters[p].Modifier {
+			switch param.Modifier {
 				case .Out: Append("out ")
 				case .Var: Append("var ")
 				default:
@@ -286,7 +286,7 @@
 		}
 	}
 
-	override func pascalGenerateDefinitionParameters(_ parameters: List<CGParameterDefinition>) {
+	override func pascalGenerateDefinitionParameters(_ parameters: List<CGParameterDefinition>, implementation: Boolean) {
 		for p in 0 ..< parameters.Count {
 			let param = parameters[p]
 			if p > 0 {
@@ -303,6 +303,9 @@
 				param.startLocation = currentLocation
 			}
 
+			if !implementation {
+				self.generateAttributes(param.Attributes, inline: true)
+			}
 			generateParameterDefinition(param)
 			param.endLocation = currentLocation
 		}
@@ -324,6 +327,17 @@
 			}
 			Append("(")
 			pascalGenerateCallParameters(expression.Parameters)
+
+			if let propertyInitializers = expression.PropertyInitializers, propertyInitializers.Count > 0 {
+				if expression.Parameters.Count > 0 {
+					Append(", ")
+				}
+				helpGenerateCommaSeparatedList(propertyInitializers) { param in
+					self.Append(param.Name)
+					self.Append(" := ")
+					self.generateExpression(param.Value)
+				}
+			}
 			Append(")")
 		}
 	}
@@ -338,7 +352,7 @@
 			case .SmartSingle: quoteChar = expression.Value.Contains(SINGLE) && !expression.Value.Contains(DOUBLE) ? DOUBLE : SINGLE
 			case .SmartDouble: quoteChar = expression.Value.Contains(DOUBLE) && !expression.Value.Contains(SINGLE) ? SINGLE : DOUBLE
 		}
-		Append(pascalEscapeCharactersInStringLiteral(expression.Value, quoteChar: quoteChar))
+		AppendPascalEscapeCharactersInStringLiteral(expression.Value, quoteChar: quoteChar)
 	}
 
 	//
@@ -386,7 +400,7 @@
 			Append("block(")
 		}
 		if let parameters = block.Parameters, parameters.Count > 0 {
-			pascalGenerateDefinitionParameters(parameters)
+			pascalGenerateDefinitionParameters(parameters, implementation: false)
 		}
 		Append(")")
 		if let returnType = block.ReturnType, !returnType.IsVoid {
@@ -403,7 +417,7 @@
 		pascalGenerateStaticPrefix(type.Static)
 		Append("extension class")
 		pascalGenerateAncestorList(type)
-		pascalGenerateGenericConstraints(type.GenericParameters)
+		pascalGenerateGenericConstraints(type.GenericParameters, needSemicolon: true)
 		AppendLine()
 		incIndent()
 	}
@@ -421,7 +435,7 @@
 			//case .None
 			case .Virtual: Append(" virtual;")
 			case .Abstract: Append(" abstract;")
-			case .Override: Append(" override; ")
+			case .Override: Append(" override;")
 			case .Final: Append(" final;")
 			case .Reintroduce: Append(" reintroduce;")
 			default:

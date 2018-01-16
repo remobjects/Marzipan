@@ -1,5 +1,4 @@
-﻿#if !FAKESUGAR
-public extension RemObjects.Elements.RTL.String {
+﻿public extension RemObjects.Elements.RTL.String {
 
 	public func AsTypeReference() -> CGTypeReference {
 		return CGNamedTypeReference(self)
@@ -37,7 +36,6 @@ public extension RemObjects.Elements.RTL.String {
 		return CGCompilerDirective(self)
 	}
 }
-#endif
 
 public extension RemObjects.Elements.System.String {
 
@@ -121,8 +119,12 @@ public extension CGExpression {
 		return CGCallParameter(self)
 	}
 
-	public func AsCallParameter(_ name: String) -> CGCallParameter {
-		return CGCallParameter(self, name)
+	public func AsCallParameter(_ name: String?) -> CGCallParameter {
+		if let name = name {
+			return CGCallParameter(self, name)
+		} else {
+			return CGCallParameter(self)
+		}
 	}
 
 	public func AsEllipsisCallParameter() -> CGCallParameter {

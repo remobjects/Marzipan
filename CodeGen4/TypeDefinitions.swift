@@ -260,6 +260,7 @@ public __abstract class CGFieldOrPropertyDefinition: CGFieldLikeMemberDefinition
 	public var Initializer: CGExpression?
 	public var ReadOnly = false
 	public var WriteOnly = false
+	public var StorageModifier: CGStorageModifierKind = CGStorageModifierKind.Strong
 }
 
 public class CGFieldDefinition: CGFieldOrPropertyDefinition {
@@ -408,6 +409,7 @@ public class CGParameterDefinition : CGEntity {
 	public var `Type`: CGTypeReference
 	public var Modifier: CGParameterModifierKind = .In
 	public var DefaultValue: CGExpression?
+	public var Attributes = List<CGAttribute>()
 
 	public init(_ name: String, _ type: CGTypeReference) {
 		Name = name
@@ -471,6 +473,7 @@ public class CGAttribute: CGEntity {
 	public var `Type`: CGTypeReference
 	public var Parameters: List<CGCallParameter>?
 	public var Comment: CGSingleLineCommentStatement?
+	public var Condition: CGConditionalDefine?
 
 	public init(_ type: CGTypeReference) {
 		`Type` = type

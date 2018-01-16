@@ -200,13 +200,25 @@
 	internal func generateImports() {
 		if currentUnit.Imports.Count > 0 {
 			for i in currentUnit.Imports {
+				if let condition = i.Condition {
+					generateConditionStart(condition)
+				}
 				generateImport(i)
+				if let condition = i.Condition {
+					generateConditionEnd(condition)
+				}
 			}
 			AppendLine()
 		}
 		if currentUnit.FileImports.Count > 0 {
 			for i in currentUnit.FileImports {
+				if let condition = i.Condition {
+					generateConditionStart(condition)
+				}
 				generateFileImport(i)
+				if let condition = i.Condition {
+					generateConditionEnd(condition)
+				}
 			}
 			AppendLine()
 		}
@@ -314,25 +326,33 @@
 		generateIdentifier(name, escaped: escaped, alwaysEmitNamespace: false)
 	}
 
+	@inline(__always) internal final func generateIdentifier(_ name: String, keywords: List<String>?) {
+		generateIdentifier(name, keywords: keywords, alwaysEmitNamespace: false)
+	}
+
 	@inline(__always) internal final func generateIdentifier(_ name: String, alwaysEmitNamespace: Boolean) {
 		generateIdentifier(name, escaped: true, alwaysEmitNamespace: alwaysEmitNamespace)
 	}
 
-	internal final func generateIdentifier(_ name: String, escaped: Boolean, alwaysEmitNamespace: Boolean) {
+	@inline(__always) internal final func generateIdentifier(_ name: String, escaped: Boolean, alwaysEmitNamespace: Boolean) {
+		generateIdentifier(name, keywords: escaped ? keywords : nil, alwaysEmitNamespace: alwaysEmitNamespace)
+	}
+
+	internal final func generateIdentifier(_ name: String, keywords: List<String>?, alwaysEmitNamespace: Boolean) {
 
 		if omitNamespacePrefixes && !alwaysEmitNamespace {
 			if name.Contains(".") {
 				if let parts = name.Split("."), length(parts) > 0 {
-					generateIdentifier(parts[length(parts)-1], escaped: escaped)
+					generateIdentifier(parts[length(parts)-1], keywords: keywords)
 					return
 				}
 			}
 		}
 
-		if escaped {
+		if let keywords = keywords {
 			if name.Contains(".") {
 				let parts = name.Split(".")
-				helpGenerateCommaSeparatedList(parts, separator: { self.Append(".") }, callback: { part in self.generateIdentifier(part, escaped: true) })
+				helpGenerateCommaSeparatedList(parts, separator: { self.Append(".") }, wrapWhenItExceedsLineLength: false, callback: { part in self.generateIdentifier(part, escaped: true) })
 			} else {
 				var checkName = name
 				if !keywordsAreCaseSensitive {
@@ -366,7 +386,7 @@
 		}
 	}
 
-	internal final func generateStatements(_ statements: List<CGVariableDeclarationStatement>?) {
+	internal final func generateStatements(variables statements: List<CGVariableDeclarationStatement>?) {
 		// descendant should not override
 		if let statements = statements {
 			for g in statements {
@@ -1023,6 +1043,8 @@
 			generateTypeMember(global.Function, type: CGGlobalTypeDefinition.GlobalType)
 		} else if let global = global as? CGGlobalVariableDefinition {
 			generateTypeMember(global.Variable, type: CGGlobalTypeDefinition.GlobalType)
+		} else if let global = global as? CGGlobalPropertyDefinition {
+			generateTypeMember(global.Property, type: CGGlobalTypeDefinition.GlobalType)
 		}
 
 		else {
@@ -1035,14 +1057,29 @@
 	//
 
 	func generateAttributes(_ attributes: List<CGAttribute>?) {
+		generateAttributes(attributes, inline: false)
+	}
+
+	func generateAttributes(_ attributes: List<CGAttribute>?, inline: Boolean) {
 		if let attributes = attributes, attributes.Count > 0 {
-			for a in attributes{
-				generateAttribute(a)
+			for a in attributes {
+				if let condition = a.Condition {
+					generateConditionStart(condition)
+					generateAttribute(a, inline: false)
+					generateConditionEnd(condition)
+				} else {
+					generateAttribute(a, inline: inline)
+				}
 			}
 		}
 	}
 
-	func generateAttribute(_ attribute: CGAttribute) {
+	final func generateAttribute(_ attribute: CGAttribute) {
+		// descendant must override
+		generateAttribute(attribute, inline: false);
+	}
+
+	internal func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		// descendant must override
 		assert(false, "generateAttribute not implemented")
 	}
@@ -1196,7 +1233,9 @@
 		if let condition = type.Condition {
 			generateConditionStart(condition)
 		}
-
+		if let condition = member.Condition {
+			generateConditionStart(condition)
+		}
 		member.startLocation = currentLocation;
 		generateCommentStatement(member.Comment)
 		generateAttributes(member.Attributes)
@@ -1233,6 +1272,10 @@
 			member.endLocation = currentLocation;
 		}*/
 		member.endLocation = currentLocation;
+
+		if let condition = member.Condition {
+			generateConditionEnd(condition)
+		}
 
 		if let condition = type.Condition {
 			generateConditionEnd(condition)
@@ -1569,7 +1612,7 @@
 		return currentCode
 	}
 
-	private final func AppendIndentToVirtualColumn(_ targetColumn: Integer) {
+	internal final func AppendIndentToVirtualColumn(_ targetColumn: Integer) {
 		atStart = false
 		if useTabs {
 			currentLocation.column += targetColumn/tabSize+targetColumn%tabSize

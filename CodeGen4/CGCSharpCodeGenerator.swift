@@ -377,7 +377,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		}
 		AppendLine(") => {")
 		incIndent()
-		generateStatements(method.LocalVariables)
+		generateStatements(variables: method.LocalVariables)
 		generateStatementsSkippingOuterBeginEndBlock(method.Statements)
 		decIndent()
 		Append("}")
@@ -439,7 +439,6 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateBinaryOperator(_ `operator`: CGBinaryOperatorKind) {
 		switch (`operator`) {
-			case .Is: Append("is")
 			case .AddEvent: Append("+=")
 			case .RemoveEvent: Append("-=")
 			default: super.generateBinaryOperator(`operator`)
@@ -458,13 +457,11 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	}
 	*/
 
-	internal func cSharpGenerateStorageModifierPrefix(_ type: CGTypeReference) {
-		if Dialect == CGCSharpCodeGeneratorDialect.Hydrogene {
-			switch type.StorageModifier {
-				case .Strong: break
-				case .Weak: Append("__weak ")
-				case .Unretained: Append("__unretained ")
-			}
+	internal func csharpGenerateStorageModifierPrefixIfNeeded(_ storageModifier: CGStorageModifierKind) {
+		switch storageModifier {
+			case .Strong: break
+			case .Weak: Append("__weak ")
+			case .Unretained: Append("__unretained ")
 		}
 	}
 
@@ -479,13 +476,18 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		for p in 0 ..< parameters.Count {
 			let param = parameters[p]
 			if p > 0 {
-				if Dialect == CGCSharpCodeGeneratorDialect.Hydrogene, let name = param.Name {
+				if Dialect == .Hydrogene, let name = param.Name {
 					Append(") ")
 					generateIdentifier(name)
 					Append("(")
 				} else {
 					Append(", ")
 				}
+			}
+			switch param.Modifier {
+				case .Out: self.Append("out ")
+				case .Var: self.Append("var ")
+				default:
 			}
 			generateExpression(param.Value)
 		}
@@ -645,6 +647,16 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 			Append("(")
 			cSharpGenerateCallParameters(expression.Parameters)
 			Append(")")
+
+			if let propertyInitializers = expression.PropertyInitializers, propertyInitializers.Count > 0 {
+				Append(" { ")
+				helpGenerateCommaSeparatedList(propertyInitializers) { param in
+					self.Append(param.Name)
+					self.Append(" = ")
+					self.generateExpression(param.Value)
+				}
+				Append(" }")
+			}
 		}
 	}
 
@@ -737,7 +749,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	// Type Definitions
 	//
 
-	override func generateAttribute(_ attribute: CGAttribute) {
+	override func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		Append("[")
 		generateTypeReference(attribute.`Type`)
 		if let parameters = attribute.Parameters, parameters.Count > 0 {
@@ -750,7 +762,11 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 			Append(" ")
 			generateSingleLineCommentStatement(comment)
 		} else {
-			AppendLine()
+			if inline {
+				Append(" ")
+			} else {
+				AppendLine()
+			}
 		}
 	}
 
@@ -785,9 +801,15 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		}
 	}
 
-	func cSharpGenerateAbstractPrefix(_ isAbstract: Boolean) {
-		if isAbstract {
+	func cSharpGenerateAbstractPrefix(_ isPartial: Boolean) {
+		if isPartial {
 			Append("abstract ")
+		}
+	}
+
+	func cSharpGeneratePartialPrefix(_ isAbstract: Boolean) {
+		if isAbstract {
+			Append("partial ")
 		}
 	}
 
@@ -885,6 +907,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		cSharpGenerateTypeVisibilityPrefix(type.Visibility)
 		cSharpGenerateStaticPrefix(type.Static)
 		cSharpGenerateAbstractPrefix(type.Abstract)
+		cSharpGeneratePartialPrefix(type.Partial)
 		cSharpGenerateSealedPrefix(type.Sealed)
 		Append("class ")
 		generateIdentifier(type.Name)
@@ -905,6 +928,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		cSharpGenerateTypeVisibilityPrefix(type.Visibility)
 		cSharpGenerateStaticPrefix(type.Static)
 		cSharpGenerateAbstractPrefix(type.Abstract)
+		cSharpGeneratePartialPrefix(type.Partial)
 		cSharpGenerateSealedPrefix(type.Sealed)
 		Append("struct ")
 		generateIdentifier(type.Name)
@@ -1001,7 +1025,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		AppendLine()
 		AppendLine("{")
 		incIndent()
-		generateStatements(method.LocalVariables)
+		generateStatements(variables: method.LocalVariables)
 		generateStatements(method.Statements)
 		decIndent()
 		AppendLine("}")
@@ -1040,7 +1064,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		AppendLine()
 		AppendLine("{")
 		incIndent()
-		generateStatements(ctor.LocalVariables)
+		generateStatements(variables: ctor.LocalVariables)
 		generateStatements(ctor.Statements)
 		decIndent()
 		AppendLine("}")
@@ -1066,7 +1090,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		AppendLine()
 		AppendLine("{")
 		incIndent()
-		generateStatements(dtor.LocalVariables)
+		generateStatements(variables: dtor.LocalVariables)
 		generateStatements(dtor.Statements)
 		decIndent()
 		AppendLine("}")
@@ -1082,8 +1106,9 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		if field.Constant {
 			Append("const ")
 		}
+
+		csharpGenerateStorageModifierPrefixIfNeeded(field.StorageModifier)
 		if let type = field.`Type` {
-			cSharpGenerateStorageModifierPrefix(type)
 			generateTypeReference(type)
 			Append(" ")
 		} else {
@@ -1102,8 +1127,8 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		cSharpGenerateStaticPrefix(property.Static && !type.Static)
 		cSharpGenerateVirtualityPrefix(property)
 
+		csharpGenerateStorageModifierPrefixIfNeeded(property.StorageModifier)
 		if let type = property.`Type` {
-			cSharpGenerateStorageModifierPrefix(type)
 			generateTypeReference(type)
 			Append(" ")
 		} else {
@@ -1330,7 +1355,17 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateTupleTypeReference(_ type: CGTupleTypeReference, ignoreNullability: Boolean = false) {
-		#hint todo
+		Append("(")
+		for m in 0 ..< type.Members.Count {
+			if m > 0 {
+				Append(", ")
+			}
+			generateTypeReference(type.Members[m])
+		}
+		Append(")")
+		if !ignoreNullability {
+			cSharpGenerateSuffixForNullability(type)
+		}
 	}
 
 	override func generateArrayTypeReference(_ array: CGArrayTypeReference, ignoreNullability: Boolean = false) {
