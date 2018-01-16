@@ -9,13 +9,18 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		super.init()
 
 		// current as of Elements 8.1 and C# 6.0
-		keywords = ["abstract", "continue", "for", "new", "switch", "assert", "default", "goto", "package", "synchronized", "boolean", "do", "if",
+		keywords = ["__assembly", "__block", "__extension", "__get", "__module", "__out", "__partial", "__ref", "__selector", "__set", "__strong", "__struct", "__unretained", "__weak",
+					"abstract", "continue", "for", "new", "switch", "assert", "default", "goto", "package", "synchronized", "boolean", "do", "if",
 					"private", "this", "break", "double", "implements", "protected", "throw", "byte", "else", "import", "public", "throws", "case",
 					"enum", "instanceof", "return", "transient", "catch", "extends", "int", "short", "try", "char", "final", "interface", "static",
 					"void", "class", "finally", "long", "strictfp", "volatile", "const", "float", "native", "super", "while"].ToList() as! List<String>
 	}
 
 	public var Dialect: CGJavaCodeGeneratorDialect = .Standard
+
+	public var isElements: Boolean { return isIodine }
+	public var isIodine: Boolean { return Dialect == .Iodine }
+	public var isStandard: Boolean { return Dialect == .Standard }
 
 	public convenience init(dialect: CGJavaCodeGeneratorDialect) {
 		init()
@@ -238,11 +243,23 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		AppendLine(";")
 	}
 
-	/*
 	override func generateAssignmentStatement(_ statement: CGAssignmentStatement) {
-		// handled in base
+		// Hack for Java not knwoing about properties
+		if Dialect != .Iodine, let property = statement.Target as? CGPropertyAccessExpression {
+			javaGenerateCallSiteForExpression(property)
+			generateIdentifier("set"+uppercaseFirstLetter(property.Name))
+			Append("(")
+			if let params = property.Parameters, params.Count > 0 {
+				javaGenerateCallParameters(property.Parameters)
+				Append(", ")
+			}
+			generateExpression(statement.Value)
+			Append(")")
+		} else {
+			super.generateAssignmentStatement(statement)
+		}
 	}
-	*/
+
 
 	override func generateConstructorCallStatement(_ statement: CGConstructorCallStatement) {
 		if let callSite = statement.CallSite, callSite is CGInheritedExpression {
@@ -295,18 +312,13 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateTypeCastExpression(_ cast: CGTypeCastExpression) {
-		if cast.ThrowsException {
 			Append("((")
 			generateTypeReference(cast.TargetType)
 			Append(")(")
 			generateExpression(cast.Expression)
 			Append("))")
-		} else {
-			Append("(")
-			generateExpression(cast.Expression)
-			Append(" as ")
-			generateTypeReference(cast.TargetType)
-			Append(")")
+		if !cast.ThrowsException {
+			Append("/* exception-less lasts not supported */")
 		}
 	}
 
@@ -363,6 +375,8 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	override func generateBinaryOperator(_ `operator`: CGBinaryOperatorKind) {
 		switch (`operator`) {
 			case .Is: Append("instanceof")
+			case .AddEvent: Append("+=")
+			case .RemoveEvent: Append("-=")
 			default: super.generateBinaryOperator(`operator`)
 		}
 	}
@@ -379,6 +393,16 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	}
 	*/
 
+	internal func javaGenerateStorageModifierPrefixIfNeeded(_ storageModifier: CGStorageModifierKind) {
+		if Dialect != .Iodine {
+			switch storageModifier {
+				case .Strong: break
+				case .Weak: Append("__weak ")
+				case .Unretained: Append("__unretained ")
+			}
+		}
+	}
+
 	internal func javaGenerateCallSiteForExpression(_ expression: CGMemberAccessExpression) {
 		if let callSite = expression.CallSite {
 			generateExpression(callSite)
@@ -390,7 +414,20 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		for p in 0 ..< parameters.Count {
 			let param = parameters[p]
 			if p > 0 {
-				Append(", ")
+				if Dialect == .Iodine, let name = param.Name {
+					Append(") ")
+					generateIdentifier(name)
+					Append("(")
+				} else {
+					Append(", ")
+				}
+			}
+			if Dialect == .Iodine {
+				switch param.Modifier {
+					case .Out: self.Append("__out ")
+					case .Var: self.Append("__ref ")
+					default:
+				}
 			}
 			generateExpression(param.Value)
 		}
@@ -410,22 +447,28 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		}
 	}
 
-	func javaGenerateDefinitionParameters(_ parameters: List<CGParameterDefinition>) {
-		for p in 0 ..< parameters.Count {
-			let param = parameters[p]
-			if p > 0 {
-				Append(", ")
-			}
+	override func generateParameterDefinition(_ param: CGParameterDefinition) {
+		if Dialect == .Iodine {
 			switch param.Modifier {
-				case .Var: Append("var ")
-				case .Const: Append("const ")
-				case .Out: Append("out ") //todo: Oxygene ony?
-				case .Params: Append("params ") //todo: Oxygene ony?
+				case .Var: Append("__ref ")
+				//case .Const: Append("const ") //todo: Oxygene ony?
+				case .Out: Append("__out ")
+				//case .Params: Append("params ")
 				default:
 			}
-			generateTypeReference(param.`Type`)
-			Append(" ")
-			generateIdentifier(param.Name)
+		}
+		generateTypeReference(param.`Type`)
+		Append(" ")
+		generateIdentifier(param.Name)
+		if let defaultValue = param.DefaultValue {
+			Append(" = ")
+			generateExpression(defaultValue)
+		}
+	}
+
+	func javaGenerateDefinitionParameters(_ parameters: List<CGParameterDefinition>) {
+		helpGenerateCommaSeparatedList(parameters) { param in
+			self.generateParameterDefinition(param)
 		}
 	}
 
@@ -474,15 +517,35 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		Append("(")
 		javaGenerateCallParameters(expression.Parameters)
 		Append(")")
+
+		if let propertyInitializers = expression.PropertyInitializers, propertyInitializers.Count > 0 {
+			Append(" /* Property Initializers : ")
+			helpGenerateCommaSeparatedList(propertyInitializers) { param in
+				self.Append(param.Name)
+				self.Append(" = ")
+				self.generateExpression(param.Value)
+			}
+			Append(" */")
+		}
 	}
 
 	override func generatePropertyAccessExpression(_ property: CGPropertyAccessExpression) {
 		javaGenerateCallSiteForExpression(property)
-		generateIdentifier(property.Name)
-		if let params = property.Parameters, params.Count > 0 {
-			Append("[")
-			javaGenerateCallParameters(property.Parameters)
-			Append("]")
+
+		if Dialect == .Iodine {
+			generateIdentifier(property.Name)
+			if let params = property.Parameters, params.Count > 0 {
+				Append("[")
+				javaGenerateCallParameters(property.Parameters)
+				Append("]")
+			}
+		} else {
+			generateIdentifier("get"+uppercaseFirstLetter(property.Name))
+			Append("(")
+			if let params = property.Parameters, params.Count > 0 {
+				javaGenerateCallParameters(property.Parameters)
+			}
+			Append(")")
 		}
 	}
 
@@ -547,7 +610,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	// Type Definitions
 	//
 
-	override func generateAttribute(_ attribute: CGAttribute) {
+	override func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		Append("@")
 		generateTypeReference(attribute.`Type`)
 		if let parameters = attribute.Parameters, parameters.Count > 0 {
@@ -559,7 +622,11 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 			Append(" ")
 			generateSingleLineCommentStatement(comment)
 		} else {
-			AppendLine()
+			if inline {
+				Append(" ")
+			} else {
+				AppendLine()
+			}
 		}
 	}
 
@@ -600,6 +667,12 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		}
 	}
 
+	func javaGeneratePartialPrefix(_ isPartial: Boolean) {
+		if isPartial {
+			Append("__partial ")
+		}
+	}
+
 	func javaGenerateSealedPrefix(_ isSealed: Boolean) {
 		if isSealed {
 			Append("final ")
@@ -622,8 +695,27 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 
 	}
 
-	override func generateBlockType(_ type: CGBlockTypeDefinition) {
+	override func generateBlockType(_ block: CGBlockTypeDefinition) {
+		if Dialect != .Iodine {
+			assert(false, "generateBlockType is not supported in Java, except in Iodine")
+		}
 
+		if block.IsPlainFunctionPointer {
+			Append("[FunctionPointer] ")
+		}
+		Append("__block ")
+		if let returnType = block.ReturnType {
+			generateTypeReference(returnType)
+		} else {
+			Append("void")
+		}
+		Append(" ")
+		generateIdentifier(block.Name)
+		Append(" (")
+		if let parameters = block.Parameters, parameters.Count > 0 {
+			javaGenerateDefinitionParameters(parameters)
+		}
+		AppendLine(");")
 	}
 
 	override func generateEnumType(_ type: CGEnumTypeDefinition) {
@@ -658,6 +750,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		javaGenerateTypeVisibilityPrefix(type.Visibility)
 		javaGenerateStaticPrefix(type.Static)
 		javaGenerateAbstractPrefix(type.Abstract)
+		javaGeneratePartialPrefix(type.Partial)
 		javaGenerateSealedPrefix(type.Sealed)
 		Append("class ")
 		generateIdentifier(type.Name)
@@ -677,6 +770,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		javaGenerateTypeVisibilityPrefix(type.Visibility)
 		javaGenerateStaticPrefix(type.Static)
 		javaGenerateAbstractPrefix(type.Abstract)
+		javaGeneratePartialPrefix(type.Partial)
 		javaGenerateSealedPrefix(type.Sealed)
 		Append("struct ")
 		generateIdentifier(type.Name)
@@ -776,7 +870,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		AppendLine()
 		AppendLine("{")
 		incIndent()
-		generateStatements(method.LocalVariables)
+		generateStatements(variables: method.LocalVariables)
 		generateStatements(method.Statements)
 		decIndent()
 		AppendLine("}")
@@ -803,7 +897,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 
 		AppendLine("{")
 		incIndent()
-		generateStatements(ctor.LocalVariables)
+		generateStatements(variables: ctor.LocalVariables)
 		generateStatements(ctor.Statements)
 		decIndent()
 		AppendLine("}")
@@ -821,6 +915,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		if field.Constant {
 			Append("final ")
 		}
+		javaGenerateStorageModifierPrefixIfNeeded(field.StorageModifier)
 		if let type = field.`Type` {
 			generateTypeReference(type)
 			Append(" ")
@@ -836,10 +931,16 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generatePropertyDefinition(_ property: CGPropertyDefinition, type: CGTypeDefinition) {
+
+		if Dialect != .Iodine {
+			assert(false, "generatePropertyDefinition is not supported in Java, except in Iodine")
+		}
+
 		javaGenerateMemberTypeVisibilityPrefix(property.Visibility)
 		javaGenerateStaticPrefix(property.Static && !type.Static)
+		javaGenerateVirtualityPrefix(property)
 
-		Append("/* property */ ")
+		javaGenerateStorageModifierPrefixIfNeeded(property.StorageModifier)
 		if let type = property.`Type` {
 			generateTypeReference(type)
 			Append(" ")
@@ -852,35 +953,82 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		} else {
 			generateIdentifier(property.Name)
 		}
-		AppendLine(";")
 
-		/*if let params = property.Parameters, params.Count > 0 {
-
+		if let params = property.Parameters, params.Count > 0 {
 			Append("[")
 			javaGenerateDefinitionParameters(params)
 			Append("]")
+		}
 
+		func appendGet() {
+			if let v = property.GetterVisibility {
+				self.javaGenerateMemberTypeVisibilityPrefix(v)
+			}
+			self.Append("__get")
+		}
+		func appendSet() {
+			if let v = property.SetterVisibility {
+				self.javaGenerateMemberTypeVisibilityPrefix(v)
+			}
+			self.Append("__set")
 		}
 
 		if property.GetStatements == nil && property.SetStatements == nil && property.GetExpression == nil && property.SetExpression == nil {
+
+			if property.ReadOnly {
+				Append(" { ")
+				appendGet()
+				Append("; }")
+			} else if property.WriteOnly {
+				Append(" { ")
+				appendSet()
+				Append("; }")
+			} else {
+				Append(" { ")
+				appendGet()
+				Append("; ")
+				appendSet()
+				Append("; }")
+			}
 			if let value = property.Initializer {
 				Append(" = ")
 				generateExpression(value)
+				Append(";")
 			}
-			AppendLine(";")
+			AppendLine()
+
 		} else {
-			AppendLine(" {")
+
+			if definitionOnly {
+				Append("{ ")
+				if property.GetStatements != nil || property.GetExpression != nil {
+					appendGet()
+					Append("; ")
+				}
+				if property.SetStatements != nil || property.SetExpression != nil {
+					appendSet()
+					Append("; ")
+				}
+				Append("}")
+				AppendLine()
+				return
+			}
+
+			AppendLine()
+			AppendLine("{")
 			incIndent()
 
 			if let getStatements = property.GetStatements {
-				AppendLine("get{")
+				appendGet()
+				AppendLine()
 				AppendLine("{")
 				incIndent()
 				generateStatementsSkippingOuterBeginEndBlock(getStatements)
 				decIndent()
 				AppendLine("}")
 			} else if let getExpresssion = property.GetExpression {
-				AppendLine("get{")
+				appendGet()
+				AppendLine()
 				AppendLine("{")
 				incIndent()
 				generateStatement(CGReturnStatement(getExpresssion))
@@ -889,14 +1037,16 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 			}
 
 			if let setStatements = property.SetStatements {
-				AppendLine("set")
+				appendSet()
+				AppendLine()
 				AppendLine("{")
 				incIndent()
 				generateStatementsSkippingOuterBeginEndBlock(setStatements)
 				decIndent()
 				AppendLine("}")
 			} else if let setExpression = property.SetExpression {
-				AppendLine("set")
+				appendSet()
+				AppendLine()
 				AppendLine("{")
 				incIndent()
 				generateStatement(CGAssignmentStatement(setExpression, CGPropertyValueExpression.PropertyValue))
@@ -910,9 +1060,10 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 			if let value = property.Initializer {
 				Append(" = ")
 				generateExpression(value)
+				Append(";")
 			}
-			AppendLine("")
-		}*/
+			AppendLine()
+		}
 	}
 
 	override func generateEventDefinition(_ event: CGEventDefinition, type: CGTypeDefinition) {
@@ -950,60 +1101,70 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	override func generatePredefinedTypeReference(_ type: CGPredefinedTypeReference, ignoreNullability: Boolean = false) {
 		if (!ignoreNullability) && (((type.Nullability == CGTypeNullabilityKind.NullableUnwrapped) && (type.DefaultNullability == CGTypeNullabilityKind.NotNullable)) || (type.Nullability == CGTypeNullabilityKind.NullableNotUnwrapped)) {
 			switch (type.Kind) {
+				case .Int: Append("Integer")
 				case .Int8: Append("Byte")
-				//case .UInt8: Append("byte")
+				case .UInt8: if isIodine { Append("UInt8") } else { Append("/* Unsupported type: UInt8 */") }
 				case .Int16: Append("Short")
-				//case .UInt16: Append("UInt16")
+				case .UInt16: if isIodine { Append("UInt16") } else { Append("/* Unsupported type: UInt16 */") }
 				case .Int32: Append("Integer")
-				//case .UInt32: Append("uint")
+				case .UInt32: if isIodine { Append("UInt32") } else { Append("/* Unsupported type: UInt32 */") }
 				case .Int64: Append("Long")
-					//case .UInt64: Append("UInt64")
-				//case .IntPtr: Append("IntPtr")
-				//case .UIntPtr: Append("UIntPtr")
+				case .UInt64: if isIodine { Append("UInt64") } else { Append("/* Unsupported type: UInt64 */") }
+				case .IntPtr: if isIodine { Append("IntPtr") } else { Append("/* Unsupported type: IntPtr */") }
+				case .UIntPtr: if isIodine { Append("UIntPtr") } else { Append("/* Unsupported type: UIntPtr */") }
 				case .Single: Append("Float")
 				case .Double: Append("Double")
 				case .Boolean: Append("Boolean")
 				case .String: Append("String")
-				//case .AnsiChar: Append("AnsiChar")
+				case .AnsiChar: Append("AnsiChar")
 				case .UTF16Char: Append("Char")
-					//case .UTF32Char: Append("UInt32")
-				//case .Dynamic: Append("Dynamic")
-				//case .InstanceType: Append("instancetype")
+				case .UTF32Char: if isIodine { Append("UTF32Char") } else { Append("/* Unsupported type: UTF32Char */") }
+				case .Dynamic: if isIodine { Append("dynamic") } else { Append("/* Unsupported type: Dynamic */") }
+				case .InstanceType: if isIodine { Append("instancetype") } else { Append("/* Unsupported type: InstanceType */") }
 				case .Void: Append("Void")
 				case .Object: Append("Object")
+				case .Class: Append("Class") // todo: make platform-specific
 				default: Append("/*Unsupported type*/")
 			}
-		}
-		else {
+		} else {
 			switch (type.Kind) {
+				case .Int: Append("int")
 				case .Int8: Append("byte")
-				//case .UInt8: Append("byte")
+				case .UInt8: if isIodine { Append("UInt8") } else { Append("/* Unsupported type: UInt8 */") }
 				case .Int16: Append("short")
-				//case .UInt16: Append("UInt16")
+				case .UInt16: if isIodine { Append("UInt16") } else { Append("/* Unsupported type: UInt16 */") }
 				case .Int32: Append("int")
-				//case .UInt32: Append("uint")
+				case .UInt32: if isIodine { Append("UInt32") } else { Append("/* Unsupported type: UInt32 */") }
 				case .Int64: Append("long")
-				//case .UInt64: Append("UInt64")
-				//case .IntPtr: Append("IntPtr")
-				//case .UIntPtr: Append("UIntPtr")
+				case .UInt64: if isIodine { Append("UInt64") } else { Append("/* Unsupported type: UInt64 */") }
+				case .IntPtr: if isIodine { Append("IntPtr") } else { Append("/* Unsupported type: IntPtr */") }
+				case .UIntPtr: if isIodine { Append("UIntPtr") } else { Append("/* Unsupported type: UIntPtr */") }
 				case .Single: Append("float")
 				case .Double: Append("double")
 				case .Boolean: Append("boolean")
 				case .String: Append("String")
-				//case .AnsiChar: Append("AnsiChar")
+				case .AnsiChar: Append("AnsiChar")
 				case .UTF16Char: Append("Char")
-				//case .UTF32Char: Append("UInt32")
-				//case .Dynamic: Append("Dynamic")
-				//case .InstanceType: Append("instancetype")
+				case .UTF32Char: if isIodine { Append("UTF32Char") } else { Append("/* Unsupported type: UTF32Char */") }
+				case .Dynamic: if isIodine { Append("dynamic") } else { Append("/* Unsupported type: Dynamic */") }
+				case .InstanceType: if isIodine { Append("instancetype") } else { Append("/* Unsupported type: InstanceType */") }
 				case .Void: Append("void")
 				case .Object: Append("Object")
+				case .Class: Append("Class") // todo: make platform-specific
 				default: Append("/*Unsupported type*/")
 			}
 		}
 	}
 
 	override func generateInlineBlockTypeReference(_ type: CGInlineBlockTypeReference, ignoreNullability: Boolean = false) {
-		Append("delegate ")
+		if Dialect != .Iodine {
+			assert(false, "generateInlineBlockTypeReference is not supported in Java, except in Iodine")
+		}
+
+		if type.Block.IsPlainFunctionPointer {
+			Append("[FunctionPointer] ")
+		}
+		Append("__block ")
 		if let returnType = type.Block.ReturnType {
 			Append(" ")
 			generateTypeReference(returnType)

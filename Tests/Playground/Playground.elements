@@ -1,26 +1,26 @@
 ﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
-<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build" ToolsVersion="4.0">
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
   <PropertyGroup>
     <ProductVersion>3.5</ProductVersion>
-    <RootNamespace>RemObjects.CodeGen4</RootNamespace>
-    <ProjectGuid>2C3408F4-2270-4310-9A38-6A5296129576</ProjectGuid>
-    <OutputType>library</OutputType>
-    <AssemblyName>CodeGen4</AssemblyName>
+    <RootNamespace>Playground</RootNamespace>
+    <ProjectGuid>{FE58CBFE-5EFA-4E2A-8CE8-291682A121B0}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>Playground</AssemblyName>
     <AllowGlobals>False</AllowGlobals>
     <AllowLegacyWith>False</AllowLegacyWith>
     <AllowLegacyOutParams>False</AllowLegacyOutParams>
     <AllowLegacyCreate>False</AllowLegacyCreate>
     <AllowUnsafeCode>False</AllowUnsafeCode>
-    <CrossPlatform>True</CrossPlatform>
+    <ApplicationIcon>Properties\App.ico</ApplicationIcon>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
+    <MinFrameworkVersionRequired>4.0</MinFrameworkVersionRequired>
     <DefaultUses>RemObjects.Elements.RTL</DefaultUses>
-    <Name>CodegGen4 (.NET)</Name>
-    <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|AnyCPU'">
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <Optimize>false</Optimize>
     <OutputPath>.\bin\Debug</OutputPath>
+    <DefineConstants>DEBUG;TRACE;</DefineConstants>
     <GeneratePDB>True</GeneratePDB>
     <GenerateMDB>True</GenerateMDB>
     <EnableAsserts>True</EnableAsserts>
@@ -35,7 +35,7 @@
     <EnableUnmanagedDebugging>False</EnableUnmanagedDebugging>
     <WarnOnCaseMismatch>True</WarnOnCaseMismatch>
   </PropertyGroup>
-  <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|AnyCPU'">
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <Optimize>true</Optimize>
     <OutputPath>.\bin\Release</OutputPath>
     <GeneratePDB>False</GeneratePDB>
@@ -66,6 +66,9 @@
     <Reference Include="System.Data.DataSetExtensions">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
     </Reference>
+    <Reference Include="Swift">
+      <Private>True</Private>
+    </Reference>
     <Reference Include="Echoes">
       <Private>True</Private>
     </Reference>
@@ -74,9 +77,18 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="Program.swift" />
     <Compile Include="Properties\AssemblyInfo.swift" />
-    <Compile Include="CodeDomToCG4.swift" />
+    <Content Include="Properties\App.ico" />
+    <EmbeddedResource Include="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+    </EmbeddedResource>
+    <Compile Include="Properties\Resources.Designer.swift" />
+    <None Include="Properties\Settings.settings">
+      <Generator>SettingsSingleFileGenerator</Generator>
+    </None>
+    <Compile Include="Properties\Settings.Designer.swift" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Echoes.targets" />
-  <Import Project="Codegen4.Shared.projitems" Label="Shared" />
+  <Import Project="..\..\Codegen4.Shared.projitems" Label="Shared" />
 </Project>

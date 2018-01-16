@@ -481,7 +481,7 @@
 	// Type Definitions
 	//
 
-	override func generateAttribute(_ attribute: CGAttribute) {
+	override func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		Append("<")
 		generateTypeReference(attribute.`Type`)
 		if let parameters = attribute.Parameters, parameters.Count > 0 {
@@ -494,7 +494,11 @@
 			Append(" ")
 			generateSingleLineCommentStatement(comment)
 		} else {
-			AppendLine()
+			if inline {
+				Append(" ")
+			} else {
+				AppendLine()
+			}
 		}
 	}
 
@@ -775,7 +779,7 @@
 		}
 
 		incIndent()
-		generateStatements(method.LocalVariables)
+		generateStatements(variables: method.LocalVariables)
 		generateStatements(method.Statements)
 		decIndent()
 		AppendLine("End Sub")

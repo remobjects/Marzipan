@@ -327,6 +327,14 @@ public __abstract class CGObjectiveCCodeGenerator : CGCStyleCodeGenerator {
 		}
 	}
 
+	internal func objcGenerateStorageModifierPrefixIfNeeded(_ storageModifier: CGStorageModifierKind) {
+		switch storageModifier {
+			case .Strong: Append("__strong ")
+			case .Weak: Append("__weak ")
+			case .Unretained: Append("__unsafe_unretained")
+		}
+	}
+
 	func objcGenerateCallParameters(_ parameters: List<CGCallParameter>, skipFirstName: Boolean = false) {
 		for p in 0 ..< parameters.Count {
 			let param = parameters[p]
@@ -465,8 +473,9 @@ public __abstract class CGObjectiveCCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateEnumValueAccessExpression(_ expression: CGEnumValueAccessExpression) {
-		// don't prefix with typename in ObjC
-		generateIdentifier(expression.ValueName)
+		if let namedType = expression.Type as? CGNamedTypeReference {
+			generateIdentifier(namedType.Name+"_"+expression.ValueName) // Obj-C enums must be unique
+		}
 	}
 
 	override func generateStringLiteralExpression(_ expression: CGStringLiteralExpression) {
@@ -540,7 +549,7 @@ public __abstract class CGObjectiveCCodeGenerator : CGCStyleCodeGenerator {
 	// Type Definitions
 	//
 
-	override func generateAttribute(_ attribute: CGAttribute) {
+	override func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		// no-op, we dont support attribtes in Objective-C
 	}
 
