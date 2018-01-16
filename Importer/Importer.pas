@@ -208,7 +208,7 @@ begin
       lMeth.ReturnType := GetMarzipanType(meth.ReturnType);
       if meth.IsConstructor then begin
         lMeth.Name := 'init';
-        lMeth.ReturnType := new CGPredefinedTypeReference(CGPredefinedTypeKind.Dynamic);
+        lMeth.ReturnType := CGPredefinedTypeReference.InstanceType;
       end;
 
       if lSignatures.Contains(lSignature) or (lNames.Contains(lMeth.Name) and (not AllowOverloadByName or (lMeth.Name = "init"))) then begin
@@ -237,7 +237,7 @@ begin
 
       //Dest
       var lCGUnaryOperatorExpression := new CGUnaryOperatorExpression(new CGNamedIdentifierExpression(lCGFieldDefinition.Name), CGUnaryOperatorKind.AddressOf);
-      var lUnaryValue := new CGTypeCastExpression(lCGUnaryOperatorExpression, new CGPointerTypeReference(new CGPointerTypeReference(new CGPredefinedTypeReference(CGPredefinedTypeKind.Void))));
+      var lUnaryValue := new CGTypeCastExpression(lCGUnaryOperatorExpression, new CGPointerTypeReference(new CGPointerTypeReference(CGPredefinedTypeReference.Void)));
 
       var lIfStatement : CGStatement := new CGAssignmentStatement(new CGPointerDereferenceExpression(lUnaryValue), lValue);
 
