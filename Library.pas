@@ -47,12 +47,14 @@ type
     fItems: ^^MonoArray;
     fLastItems: ^MonoArray;
     fArray: MZArray;
+    fNSArray: NSArray;
 
     class var fSizeField: ^MonoClassField;
     class var fItemsField: ^MonoClassField;
     method get_count: NSUInteger;
   public
     property &type: &Class := typeOf(MZObject);
+    constructor withNSArray(aNSArray: NSArray);
     constructor withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
     method clear;
     property count: NSUInteger read get_count;
@@ -62,7 +64,7 @@ type
     method countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
     method NSArray: NSArray;
   end;
-  
+
   RemObjects.Marzipan.Generic.MZObjectList<T> = public class(INSFastEnumeration<T>) mapped to MZObjectList
     where T is class;
   public
@@ -89,7 +91,7 @@ end;
 
 method MZString.get_length: Integer;
 begin
-  if fLength = nil then 
+  if fLength = nil then
     ^^Void(@fLength)^ := fType.getMethodThunk(':get_Length()');
   var ex: ^MonoException := nil;
   result := fLength(__instance, @ex);
@@ -209,18 +211,23 @@ begin
   if state^.state >= c then exit 0;
 
   var i := 0;
-  while (state^.state+i <= c) and (i <= len) do begin
+  while (state^.state <= c) and (i <= len) do begin
     buffer[i] := objectAtIndex(state^.state);
     inc(i);
+    inc(state^.state);
   end;
-  inc(state^.state, i);
   result := i;
-  
+
   state^.itemsPtr := buffer;
   state^.mutationsPtr := nil;
 end;
 
 { MZObjectList }
+
+constructor MZObjectList withNSArray(aNSArray: NSArray);
+begin
+  fNSArray := aNSArray;
+end;
 
 constructor MZObjectList withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
 begin
@@ -244,14 +251,14 @@ method MZObjectList.objectAtIndex(aIndex: Integer): id;
 begin
   if fItems = nil then MZObjectListInitFields(self); // global methods optimize better.
   if (fItems^ <> fLastItems) or (fArray = nil) then MZObjectListLoadArray(self);
-  exit fArray[aIndex];  
+  exit fArray[aIndex];
 end;
 
 method MZObjectList.objectAtIndexedSubscript(aIndex: Integer): id;
 begin
   if fItems = nil then MZObjectListInitFields(self); // global methods optimize better.
   if (fItems^ <> fLastItems) or (fArray = nil) then MZObjectListLoadArray(self);
-  exit fArray[aIndex];  
+  exit fArray[aIndex];
 end;
 
 method MZObjectList.countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
@@ -269,12 +276,15 @@ end;
 
 method MZObjectList.NSArray: NSArray;
 begin
-  if fItems = nil then MZObjectListInitFields(self);
-  if (fArray = nil) then MZObjectListLoadArray(self);
-  var lTmp := new NSMutableArray withCapacity(count);
-  for i: Integer := 0 to count-1 do
-    lTmp[i] := fArray[i];
-  exit lTmp;
+  if fNSArray ≠ nil then begin
+    if fItems = nil then MZObjectListInitFields(self);
+    if (fArray = nil) then MZObjectListLoadArray(self);
+    var lTmp := new NSMutableArray withCapacity(count);
+    for i: Integer := 0 to count-1 do
+      lTmp[i] := fArray[i];
+    fNSArray := lTmp;
+  end;
+  result := fNSArray;
 end;
 
 method MZObjectListInitFields(aInst: MZObjectList);
@@ -284,7 +294,7 @@ begin
     MZObjectList.fSizeField := mono_class_get_field_from_name(lClass, '_size');
     MZObjectList.fItemsField := mono_class_get_field_from_name(lClass, '_items');
   end;
-  
+
   aInst.fSize := ^Int32(^Byte(aInst.__instance) + mono_field_get_offset(MZObjectList.fSizeField));
   aInst.fItems := ^^MonoArray(^Byte(aInst.__instance) + mono_field_get_offset(MZObjectList.fItemsField));
 end;
