@@ -86,6 +86,7 @@ begin
   fCodeGenerator := aCodeGenerator;
   fImportNameMapping.Add('System.Object', 'MZObject');
   fImportNameMapping.Add('System.String', 'NSString');
+  fImportNameMapping.Add('System.DateTime', 'MZDateTime');
   fImportNameMapping.Add('System.SByte', 'int8_t');
   fImportNameMapping.Add('System.Byte', 'uint8_t');
   fImportNameMapping.Add('System.Int16', 'int16_t');
@@ -512,6 +513,7 @@ begin
   case aType.FullName of
     'System.String': exit new CGPointerTypeReference(new CGNamedTypeReference('MonoString'));
     'System.Object': exit new CGPointerTypeReference(new CGNamedTypeReference('MonoObject'));
+    'System.DateTime': exit new CGNamedTypeReference('MZDateTime');
     'System.Char': exit new CGNamedTypeReference('Char');
     'System.Single': exit new CGNamedTypeReference('Single');
     'System.Double': exit new CGNamedTypeReference('Double');
@@ -552,6 +554,7 @@ method Importer.GetMarzipanType(aType: TypeReference): CGTypeReference;
 begin
   if aType.FullName = 'System.Void' then exit nil;
   if aType.FullName = 'System.String' then exit new CGNamedTypeReference('NSString');
+  if aType.FullName = 'System.DateTime' then exit new CGNamedTypeReference('MZDateTime');;
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeReference(GetMonoType(aType.GetElementType));
   var b: Boolean;

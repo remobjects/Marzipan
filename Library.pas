@@ -25,6 +25,8 @@ type
     property NSString: NSString read get_NSString;
   end;
 
+  MZDateTime = public int64_t;
+
   MZArray = public class(MZObject)
   private
   public
@@ -211,7 +213,7 @@ begin
   if state^.state >= c then exit 0;
 
   var i := 0;
-  while (state^.state <= c) and (i <= len) do begin
+  while (state^.state < c) and (i < len) do begin
     buffer[i] := objectAtIndex(state^.state);
     inc(i);
     inc(state^.state);
@@ -264,7 +266,7 @@ end;
 method MZObjectList.countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
 begin
   if fItems = nil then MZObjectListInitFields(self); // global methods optimize better.
-  if (fItems^ <> fLastItems) or (fArray = nil) then MZObjectListLoadArray(self);
+  if (fItems^ ≠ fLastItems) or (fArray = nil) then MZObjectListLoadArray(self);
   result := fArray.countByEnumeratingWithState(state) objects(buffer) count(len);
 end;
 
