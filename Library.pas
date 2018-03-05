@@ -29,6 +29,7 @@ type
 
   MZArray = public class(MZObject)
   private
+    fNSArray: NSArray;
   public
     constructor withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
     constructor withNSArray(aArray: NSArray);
@@ -194,34 +195,25 @@ end;
 
 method MZArray.NSArray: NSArray;
 begin
-  var lTmp := new NSMutableArray withCapacity(count);
-  var lElements := elements;
-  if &type = typeOf(String) then begin
-    for i: Integer := 0 to count -1 do
-      lTmp[i] := MZString.NSStringWithMonoString(^MonoString(lElements[i]));
-  end
-  else begin
-    for i: Integer := 0 to count -1 do
-      lTmp[i] := id(&type.alloc()).initWithMonoInstance(lElements[i]);
+  if fNSArray = nil then begin
+    var lTmp := new NSMutableArray withCapacity(count);
+    var lElements := elements;
+    if &type = typeOf(String) then begin
+      for i: Integer := 0 to count -1 do
+        lTmp[i] := MZString.NSStringWithMonoString(^MonoString(lElements[i]));
+    end
+    else begin
+      for i: Integer := 0 to count -1 do
+        lTmp[i] := id(&type.alloc()).initWithMonoInstance(lElements[i]);
+    end;
+    fNSArray := lTmp;
   end;
-  exit lTmp;
+  result := fNSArray;
 end;
 
 method MZArray.countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
 begin
-  var c := count;
-  if state^.state >= c then exit 0;
-
-  var i := 0;
-  while (state^.state < c) and (i < len) do begin
-    buffer[i] := objectAtIndex(state^.state);
-    inc(i);
-    inc(state^.state);
-  end;
-  result := i;
-
-  state^.itemsPtr := buffer;
-  state^.mutationsPtr := nil;
+  result := NSArray.countByEnumeratingWithState(state) objects(buffer) count(len);
 end;
 
 { MZObjectList }
@@ -265,9 +257,7 @@ end;
 
 method MZObjectList.countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
 begin
-  if fItems = nil then MZObjectListInitFields(self); // global methods optimize better.
-  if (fItems^ ≠ fLastItems) or (fArray = nil) then MZObjectListLoadArray(self);
-  result := fArray.countByEnumeratingWithState(state) objects(buffer) count(len);
+  result := NSArray.countByEnumeratingWithState(state) objects(buffer) count(len);
 end;
 
 method MZObjectList.get_count: NSUInteger;
@@ -278,7 +268,7 @@ end;
 
 method MZObjectList.NSArray: NSArray;
 begin
-  if fNSArray ≠ nil then begin
+  if fNSArray = nil then begin
     if fItems = nil then MZObjectListInitFields(self);
     if (fArray = nil) then MZObjectListLoadArray(self);
     var lTmp := new NSMutableArray withCapacity(count);
