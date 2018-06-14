@@ -209,8 +209,8 @@ begin
   locking self do begin
     result := fAssemblies.objectForKey(aPath);
     if assigned(result) then exit;
-    var lasm := mono_domain_assembly_open (fDomain, aPath);
-    if lasm = nil then raise new MZException withName('CouldNotLoadAssembly') reason(NSString.stringWithFormat('Could not load assembly "%@".', aPath)) userinfo(nil);
+    var lasm := mono_domain_assembly_open (fDomain, aPath.UTF8String);
+    if not assigned(lasm) then raise new MZException withName('CouldNotLoadAssembly') reason(NSString.stringWithFormat('Could not load assembly "%@".', aPath)) userinfo(nil);
     result := new MZMonoAssembly &assembly(lasm);
     fAssemblies.setObject(result) forKey(aPath);
     if fAssemblies.count = 1 then
