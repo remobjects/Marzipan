@@ -19,7 +19,7 @@ type
     class method GetTypeName(aTR: TypeReference): String;
     begin
       if aTR is GenericInstanceType then
-        exit aTR.Name.Replace('`', '')+'_'+String.Join('__', GenericInstanceType(aTR).GenericArguments.Select(a -> a.Name));
+        exit aTR.Name.Replace('`', '')+'_'+String.Join('__', GenericInstanceType(aTR).GenericArguments.Select(a -> GetTypeName(a)));
       exit aTR.Name;
     end;
 
