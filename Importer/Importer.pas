@@ -42,6 +42,8 @@ type
       exit aType.Resolve;
     end;
 
+    property MZObjectTypeReference := new CGNamedTypeReference('MZObject'); lazy; readonly;
+
     method LoadAsm(el: String): ModuleDefinition;
     method IsListObjectRef(aType: TypeReference; out aArray: Boolean): Boolean;
     method WrapListObject(aVal: CGExpression; aType: CGTypeReference; aArray: Boolean): CGExpression;
@@ -207,6 +209,8 @@ begin
       lMeth.Visibility := CGMemberVisibilityKind.Public;
       lMethodMap[meth] := lMeth;
       lMeth.ReturnType := GetMarzipanType(meth.ReturnType);
+      //if lMeth.ReturnType = MZObjectTypeReference then
+        //lMeth.Comment := new CGCommentStatement(meth.ReturnType.FullName);
       if meth.IsConstructor then begin
         lMeth.Name := 'init';
         lMeth.ReturnType := CGPredefinedTypeReference.InstanceType;
@@ -294,6 +298,9 @@ begin
 
         var lPar := new CGParameterDefinition(lParamName, lParamType);
         if lIsByReference then lPar.Modifier := lParamModifier;
+
+        //if (llParamType = MZObjectTypeReference) and lIsByReference then
+          //lPar.Comment := new CGCommentStatement(lPTar.FullName);
 
         lMeth.Parameters.Add(lPar);
 
@@ -395,6 +402,8 @@ begin
         lProp.Parameters.Add(new CGParameterDefinition(elz.Name, GetMarzipanType(elz.ParameterType)));
 
       lProp.Type := GetMarzipanType(prop.PropertyType);
+      //if lProp.Type = MZObjectTypeReference then
+        //lProp.Comment := new CGCommentStatement(prop.PropertyType.FullName);
       if assigned(prop.GetMethod) and lMethodMap.ContainsKey(prop.GetMethod) then begin
         var lMeth := lMethodMap[prop.GetMethod];
         lMeth.Visibility := CGMemberVisibilityKind.Private;
@@ -569,7 +578,7 @@ begin
   var lRes: String;
   if self.fImportNameMapping.TryGetValue(aType.FullName, out lRes) then
     exit new CGNamedTypeReference(lRes);
-  exit new CGNamedTypeReference('MZObject');
+  exit MZObjectTypeReference;
 end;
 
 method Importer.Resolve(fullName: String): AssemblyDefinition;
