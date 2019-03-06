@@ -262,10 +262,14 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 
 
 	override func generateConstructorCallStatement(_ statement: CGConstructorCallStatement) {
-		if let callSite = statement.CallSite, callSite is CGInheritedExpression {
-			generateExpression(callSite)
-		} else {
-			Append("this")
+		if let callSite = statement.CallSite {
+			if callSite is CGInheritedExpression {
+				Append("super")
+			} else if callSite is CGSelfExpression {
+				Append("this")
+			} else {
+				assert(false, "Unsupported call site for constructor call.")
+			}
 		}
 		if let name = statement.ConstructorName {
 			Append(" ")
@@ -308,7 +312,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateSelectorExpression(_ expression: CGSelectorExpression) {
-		assert(false, "generateSelectorExpression is not supported in C#, except in Hydrogene")
+		assert(false, "generateSelectorExpression is not supported")
 	}
 
 	override func generateTypeCastExpression(_ cast: CGTypeCastExpression) {
@@ -318,7 +322,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 			generateExpression(cast.Expression)
 			Append("))")
 		if !cast.ThrowsException {
-			Append("/* exception-less lasts not supported */")
+			Append("/* exception-less casts not supported */")
 		}
 	}
 
@@ -406,7 +410,13 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	internal func javaGenerateCallSiteForExpression(_ expression: CGMemberAccessExpression) {
 		if let callSite = expression.CallSite {
 			generateExpression(callSite)
-			Append(".")
+			if (expression.Name != "") {
+				if expression.NilSafe {
+					Append("?.")
+				} else {
+					Append(".")
+				}
+			}
 		}
 	}
 
@@ -424,8 +434,8 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 			}
 			if Dialect == .Iodine {
 				switch param.Modifier {
-					case .Out: self.Append("__out ")
 					case .Var: self.Append("__ref ")
+					case .Out: self.Append("__out ")
 					default:
 				}
 			}
@@ -668,7 +678,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	func javaGeneratePartialPrefix(_ isPartial: Boolean) {
-		if isPartial {
+		if isPartial && Dialect == .Iodine {
 			Append("__partial ")
 		}
 	}
@@ -701,8 +711,9 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		}
 
 		if block.IsPlainFunctionPointer {
-			Append("[FunctionPointer] ")
+			Append("@FunctionPointer ")
 		}
+		javaGenerateTypeVisibilityPrefix(block.Visibility)
 		Append("__block ")
 		if let returnType = block.ReturnType {
 			generateTypeReference(returnType)
@@ -732,6 +743,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 		incIndent()
 		helpGenerateCommaSeparatedList(type.Members) { m in
 			if let member = m as? CGEnumValueDefinition {
+				self.generateAttributes(member.Attributes, inline: true)
 				self.generateIdentifier(member.Name)
 				if let value = member.Value {
 					self.Append(" = ")
@@ -1067,36 +1079,31 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateEventDefinition(_ event: CGEventDefinition, type: CGTypeDefinition) {
-		assert(false, "generateEventDefinition is not supported in Java")
+
+		if Dialect != .Iodine {
+			assert(false, "generateEventDefinition is not supported in Java, except in Iodine")
+		}
+
+		javaGenerateMemberTypeVisibilityPrefix(event.Visibility)
+		javaGenerateStaticPrefix(event.Static && !type.Static)
+		javaGenerateVirtualityPrefix(event)
+
+		Append("__event ")
+		if let type = event.`Type` {
+			generateTypeReference(type)
+			Append(" ")
+		}
+		generateIdentifier(event.Name)
+		AppendLine(";")
 	}
 
 	override func generateCustomOperatorDefinition(_ customOperator: CGCustomOperatorDefinition, type: CGTypeDefinition) {
-		//todo
+		generateCommentStatement(CGCommentStatement("Custom Operator \(customOperator.Name)"))
 	}
 
 	//
 	// Type References
 	//
-
-	/*
-	override func generateNamedTypeReference(_ type: CGNamedTypeReference) {
-
-	}
-	*/
-
-	override func generateGenericArguments(_ genericArguments: List<CGTypeReference>?) {
-		if let genericArguments = genericArguments, genericArguments.Count > 0 {
-			Append("<")
-			for p in 0 ..< genericArguments.Count {
-				let param = genericArguments[p]
-				if p > 0 {
-					Append(",")
-				}
-				generateTypeReference(param) // overriden from base to not omit nullability on Java
-			}
-			Append(">")
-		}
-	}
 
 	override func generatePredefinedTypeReference(_ type: CGPredefinedTypeReference, ignoreNullability: Boolean = false) {
 		if (!ignoreNullability) && (((type.Nullability == CGTypeNullabilityKind.NullableUnwrapped) && (type.DefaultNullability == CGTypeNullabilityKind.NotNullable)) || (type.Nullability == CGTypeNullabilityKind.NullableNotUnwrapped)) {
@@ -1120,7 +1127,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 				case .UTF16Char: Append("Char")
 				case .UTF32Char: if isIodine { Append("UTF32Char") } else { Append("/* Unsupported type: UTF32Char */") }
 				case .Dynamic: if isIodine { Append("dynamic") } else { Append("/* Unsupported type: Dynamic */") }
-				case .InstanceType: if isIodine { Append("instancetype") } else { Append("/* Unsupported type: InstanceType */") }
+				case .InstanceType: if isIodine { Append("InstanceType") } else { Append("/* Unsupported type: InstanceType */") }
 				case .Void: Append("Void")
 				case .Object: Append("Object")
 				case .Class: Append("Class") // todo: make platform-specific
@@ -1147,7 +1154,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 				case .UTF16Char: Append("Char")
 				case .UTF32Char: if isIodine { Append("UTF32Char") } else { Append("/* Unsupported type: UTF32Char */") }
 				case .Dynamic: if isIodine { Append("dynamic") } else { Append("/* Unsupported type: Dynamic */") }
-				case .InstanceType: if isIodine { Append("instancetype") } else { Append("/* Unsupported type: InstanceType */") }
+				case .InstanceType: if isIodine { Append("InstanceType") } else { Append("/* Unsupported type: InstanceType */") }
 				case .Void: Append("void")
 				case .Object: Append("Object")
 				case .Class: Append("Class") // todo: make platform-specific

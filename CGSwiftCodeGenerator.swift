@@ -583,7 +583,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	private func swiftGenerateParameterDefinition(_ param: CGParameterDefinition, emitExternal: Boolean, externalName: String? = nil) {
-		if emitExternal, let externalName = param.ExternalName ?? externalName {
+		if emitExternal, let externalName = externalName ?? param.ExternalName {
 			if externalName != param.Name {
 				generateIdentifier(externalName)
 				Append(" ")
@@ -605,6 +605,9 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 			default:
 		}
 		generateTypeReference(param.`Type`)
+		if param.Modifier == .Params {
+			Append("...")
+		}
 		if let defaultValue = param.DefaultValue {
 			Append(" = ")
 			generateExpression(defaultValue)
@@ -766,11 +769,8 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateArrayLiteralExpression(_ array: CGArrayLiteralExpression) {
 		Append("[")
-		for e in 0 ..< array.Elements.Count {
-			if e > 0 {
-				Append(", ")
-			}
-			generateExpression(array.Elements[e])
+			helpGenerateCommaSeparatedList(array.Elements) {
+			self.generateExpression($0)
 		}
 		Append("]")
 	}
@@ -906,8 +906,8 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	func swiftGeneratePartialPrefix(_ isPartial: Boolean) {
-		if isPartial {
-			Append("partial ")
+		if isPartial  && Dialect == .Silver {
+			Append("__partial ")
 		}
 	}
 
@@ -965,6 +965,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 		incIndent()
 		for m in type.Members {
 			if let m = m as? CGEnumValueDefinition {
+				self.generateAttributes(m.Attributes)
 				Append("case ")
 				generateIdentifier(m.Name)
 				if let value = m.Value {
@@ -1210,7 +1211,9 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 				Append("(set) ")
 			}
 		} else {
-			swiftGenerateMemberTypeVisibilityPrefix(property.Visibility, virtuality: property.Virtuality)
+			if !(type is CGInterfaceTypeDefinition) {
+				swiftGenerateMemberTypeVisibilityPrefix(property.Visibility, virtuality: property.Virtuality)
+			}
 		}
 
 		swiftGenerateStaticPrefix(property.Static && !type.Static)
@@ -1251,6 +1254,18 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 		}
 
 		if property.IsShortcutProperty {
+
+			if type is CGInterfaceTypeDefinition  {
+				if property.ReadOnly {
+					Append(" { get }")
+				} else if property.WriteOnly {
+					Append(" { set }")
+				} else {
+					Append(" { get set }")
+				}
+				AppendLine()
+				return
+			}
 
 			if let value = property.Initializer {
 				Append(" = ")
@@ -1329,8 +1344,55 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 		}
 	}
 
+	override func wellKnownSymbolForCustomOperator(name: String!) -> String? {
+		switch name.ToUpper() {
+			case "implicit": return "__implicit"
+			case "explicit": return "__explicit"
+			default: return super.wellKnownSymbolForCustomOperator(name: name)
+		}
+	}
+
 	override func generateCustomOperatorDefinition(_ customOperator: CGCustomOperatorDefinition, type: CGTypeDefinition) {
-		//todo
+		if type is CGInterfaceTypeDefinition {
+			if customOperator.Optional {
+				Append("optional ")
+			}
+			swiftGenerateStaticPrefix(customOperator.Static && !type.Static)
+		} else {
+			swiftGenerateMemberTypeVisibilityPrefix(customOperator.Visibility, virtuality: customOperator.Virtuality)
+			swiftGenerateStaticPrefix(customOperator.Static && !type.Static)
+			if customOperator.External && Dialect == CGSwiftCodeGeneratorDialect.Silver {
+				Append("__extern ")
+			}
+		}
+		Append("static func ")
+		if let symbol = wellKnownSymbolForCustomOperator(name: customOperator.Name) {
+			Append(symbol)
+		} else {
+			Append(customOperator.Name)
+		}
+		Append("(")
+		swiftGenerateDefinitionParameters(customOperator.Parameters)
+		Append(")")
+
+		if let returnType = customOperator.ReturnType, !returnType.IsVoid {
+			Append(" -> ")
+			returnType.startLocation = currentLocation
+			generateTypeReference(returnType)
+			returnType.endLocation = currentLocation
+		}
+
+		if type is CGInterfaceTypeDefinition || customOperator.External || definitionOnly {
+			AppendLine()
+			return
+		}
+
+		AppendLine(" {")
+		incIndent()
+		generateStatements(variables: customOperator.LocalVariables)
+		generateStatements(customOperator.Statements)
+		decIndent()
+		AppendLine("}")
 	}
 
 	override func generateNestedTypeDefinition(_ member: CGNestedTypeDefinition, type: CGTypeDefinition) {
@@ -1527,7 +1589,7 @@ public class CGSwiftCodeGenerator : CGCStyleCodeGenerator {
 
 	private func removeWithPrefix(_ name: String) -> String {
 		var name = name
-		if name.ToLower().StartsWith("with") {
+		if name.ToLowerInvariant().StartsWith("with") {
 			name = name.Substring(4)
 		}
 		return lowercaseFirstLetter(name)

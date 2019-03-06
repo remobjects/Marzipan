@@ -74,7 +74,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateGlobals() {
 		if let globals = currentUnit.Globals, globals.Count > 0{
-			AppendLine("public static class __Globals")
+			AppendLine("public static partial class __Global")
 			AppendLine("{")
 			incIndent()
 			super.generateGlobals()
@@ -279,11 +279,16 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	private func cSharpGenerateInlineConstructorCallStatement(_ statement: CGConstructorCallStatement) {
-		if let callSite = statement.CallSite, callSite is CGInheritedExpression {
-			generateExpression(callSite)
-		} else {
-			Append("this")
+		if let callSite = statement.CallSite {
+			if callSite is CGInheritedExpression {
+				Append("base")
+			} else if callSite is CGSelfExpression {
+				Append("this")
+			} else {
+				assert(false, "Unsupported call site for constructor call.")
+			}
 		}
+
 		if let name = statement.ConstructorName {
 			Append(" ")
 			Append(name)
@@ -468,7 +473,13 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	internal func cSharpGenerateCallSiteForExpression(_ expression: CGMemberAccessExpression) {
 		if let callSite = expression.CallSite {
 			generateExpression(callSite)
-			Append(".")
+			if (expression.Name != "") {
+				if expression.NilSafe {
+					Append("?.")
+				} else {
+					Append(".")
+				}
+			}
 		}
 	}
 
@@ -485,12 +496,19 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 				}
 			}
 			switch param.Modifier {
+				case .Var: self.Append("ref ")
 				case .Out: self.Append("out ")
-				case .Var: self.Append("var ")
 				default:
 			}
 			generateExpression(param.Value)
 		}
+	}
+
+	override func generateConditionStart(_ condition: CGConditionalDefine) {
+		// repeated as c# does not have ifndef while C does.
+		Append("#if ")
+		generateExpression(condition.Expression)
+		AppendLine()
 	}
 
 	func cSharpGenerateAttributeParameters(_ parameters: List<CGCallParameter>) {
@@ -692,7 +710,10 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 
 	/*
 	override func generateIntegerLiteralExpression(_ expression: CGIntegerLiteralExpression) {
-		// handled in base
+		switch literalExpression.Base {
+			case 1: Append("0b"+literalExpression.StringRepresentation(base:1))
+			default: super.generateStringLiteralExpression(expression)
+		}
 	}
 	*/
 
@@ -832,6 +853,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateAliasType(_ type: CGTypeAliasDefinition) {
+		cSharpGenerateTypeVisibilityPrefix(type.Visibility)
 		Append("using ")
 		generateIdentifier(type.Name)
 		Append(" = ")
@@ -843,6 +865,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		if block.IsPlainFunctionPointer {
 			Append("[FunctionPointer] ")
 		}
+		cSharpGenerateTypeVisibilityPrefix(block.Visibility)
 		Append("delegate ")
 		if let returnType = block.ReturnType {
 			generateTypeReference(returnType)
@@ -889,6 +912,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		incIndent()
 		helpGenerateCommaSeparatedList(type.Members, separator: { self.AppendLine(",") } ) {m in
 			if let member = m as? CGEnumValueDefinition {
+				self.generateAttributes(member.Attributes, inline: true)
 				self.generateIdentifier(member.Name)
 				if let value = member.Value {
 					self.Append(" = ")
@@ -1103,18 +1127,39 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	override func generateFieldDefinition(_ field: CGFieldDefinition, type: CGTypeDefinition) {
 		cSharpGenerateMemberTypeVisibilityPrefix(field.Visibility)
 		cSharpGenerateStaticPrefix(field.Static && !type.Static)
+		var fixedArrayType: Boolean = false
+		if let arr = field.Type as? CGArrayTypeReference {
+			if let bounds = arr.Bounds, bounds.Count == 1 {
+				Append("fixed ");
+				fixedArrayType = true;
+			}
+		}
 		if field.Constant {
 			Append("const ")
 		}
 
+		if field.Volatile {
+			Append("volatile ")
+		}
+
 		csharpGenerateStorageModifierPrefixIfNeeded(field.StorageModifier)
 		if let type = field.`Type` {
-			generateTypeReference(type)
+			if fixedArrayType {
+				generateTypeReference((type as! CGArrayTypeReference).Type)
+			} else {
+				generateTypeReference(type)
+			}
 			Append(" ")
 		} else {
 			Append("var ")
 		}
 		generateIdentifier(field.Name)
+		if fixedArrayType {
+			Append("[");
+			let arr = field.Type as! CGArrayTypeReference
+			Append("" + (arr.Bounds[0].End - arr.Bounds[0].Start + 1));
+			Append("]");
+		}
 		if let value = field.Initializer {
 			Append(" = ")
 			generateExpression(value)
@@ -1123,9 +1168,11 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generatePropertyDefinition(_ property: CGPropertyDefinition, type: CGTypeDefinition) {
-		cSharpGenerateMemberTypeVisibilityPrefix(property.Visibility)
-		cSharpGenerateStaticPrefix(property.Static && !type.Static)
-		cSharpGenerateVirtualityPrefix(property)
+		if !(type is CGInterfaceTypeDefinition) {
+			cSharpGenerateMemberTypeVisibilityPrefix(property.Visibility)
+			cSharpGenerateStaticPrefix(property.Static && !type.Static)
+			cSharpGenerateVirtualityPrefix(property)
+		}
 
 		csharpGenerateStorageModifierPrefixIfNeeded(property.StorageModifier)
 		if let type = property.`Type` {
@@ -1153,6 +1200,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 			}
 			self.Append("get")
 		}
+
 		func appendSet() {
 			if let v = property.SetterVisibility {
 				self.cSharpGenerateMemberTypeVisibilityPrefix(v)
@@ -1268,7 +1316,66 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateCustomOperatorDefinition(_ customOperator: CGCustomOperatorDefinition, type: CGTypeDefinition) {
-		//todo
+
+		if type is CGInterfaceTypeDefinition {
+			if customOperator.Optional {
+				Append("[Optional] ")
+			}
+			cSharpGenerateStaticPrefix(!type.Static)
+		} else {
+			cSharpGenerateMemberTypeVisibilityPrefix(customOperator.Visibility)
+			cSharpGenerateStaticPrefix(!type.Static)
+			cSharpGenerateVirtualityPrefix(customOperator)
+		}
+
+		let lowerName = customOperator.Name.ToLower()
+		if lowerName == "implicit" || lowerName == "explicit" {
+
+			Append(lowerName)
+			Append(" operator")
+			if let returnType = customOperator.ReturnType {
+				returnType.startLocation = currentLocation
+				generateTypeReference(returnType)
+				returnType.endLocation = currentLocation
+			} else {
+				Append("void")
+			}
+
+		} else {
+
+			if let returnType = customOperator.ReturnType {
+				returnType.startLocation = currentLocation
+				generateTypeReference(returnType)
+				returnType.endLocation = currentLocation
+				Append(" ")
+			} else {
+				Append("void ")
+			}
+			Append("operator ")
+
+			if let symbol = wellKnownSymbolForCustomOperator(name: customOperator.Name) {
+				Append(symbol)
+			} else {
+				Append(customOperator.Name)
+			}
+		}
+
+		Append("(")
+		cSharpGenerateDefinitionParameters(customOperator.Parameters)
+		Append(")")
+
+		if type is CGInterfaceTypeDefinition || customOperator.Virtuality == CGMemberVirtualityKind.Abstract || customOperator.External || definitionOnly {
+			AppendLine(";")
+			return
+		}
+
+		AppendLine()
+		AppendLine("{")
+		incIndent()
+		generateStatements(variables: customOperator.LocalVariables)
+		generateStatements(customOperator.Statements)
+		decIndent()
+		AppendLine("}")
 	}
 
 	override func generateNestedTypeDefinition(_ member: CGNestedTypeDefinition, type: CGTypeDefinition) {
@@ -1325,7 +1432,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 			case .UTF16Char: Append("char")
 			case .UTF32Char: Append("UInt32")
 			case .Dynamic: Append("dynamic")
-			case .InstanceType: Append("instancetype")
+			case .InstanceType: Append("InstanceType")
 			case .Void: Append("void")
 			case .Object: Append("object")
 			case .Class: Append("Class") // todo: make platform-specific

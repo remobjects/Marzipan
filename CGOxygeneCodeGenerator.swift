@@ -128,7 +128,7 @@
 	}
 
 	override func generateVariableDeclarationStatement(_ statement: CGVariableDeclarationStatement) {
-		Append("var ")
+		Append("var ");
 		generateIdentifier(statement.Name)
 		if let type = statement.`Type` {
 			Append(": ")
@@ -138,18 +138,24 @@
 			Append(" := ")
 			generateExpression(value)
 		}
+		if (statement.ReadOnly) {
+			Append("; readonly");
+		}
 		AppendLine(";")
 	}
 
 	override func generateConstructorCallStatement(_ statement: CGConstructorCallStatement) {
 		if let callSite = statement.CallSite {
-			generateExpression(callSite)
 			if callSite is CGInheritedExpression {
+				generateExpression(callSite)
 				Append(" ")
+			} else if callSite is CGSelfExpression {
+				// no-op
 			} else {
-				Append(".")
+				assert(false, "Unsupported call site for constructor call.")
 			}
 		}
+
 		Append("constructor")
 		if let name = statement.ConstructorName {
 			Append(" ")
@@ -579,7 +585,7 @@
 			case .UTF16Char: Append("Char")
 			case .UTF32Char: Append("UInt32") // tood?
 			case .Dynamic: Append("dynamic")
-			case .InstanceType: Append("instancetype")
+			case .InstanceType: Append("InstanceType")
 			case .Void: Append("{VOID}")
 			case .Object: Append("Object")
 			case .Class: generateIdentifier("Class") // todo: make platform-specific
