@@ -170,6 +170,24 @@
 		}
 	}
 
+	/* */
+
+	public var failOnAsserts: Boolean = false
+
+	@inline(__always) internal func assert(_ ok: Boolean, _ message: String) {
+		if !ok {
+			assert(message)
+		}
+	}
+
+	internal func assert(_ message: String) {
+		if failOnAsserts {
+			throw Exception(message)
+		} else {
+			generateInlineComment(message)
+		}
+	}
+
 	/* These following functions *can* be overriden by descendants, if needed */
 
 	internal func generateHeader() {
@@ -504,10 +522,13 @@
 			generateConstructorCallStatement(statement)
 		} else if let statement = statement as? CGEmptyStatement {
 			AppendLine()
+		} else if let expression = statement as? CGGotoStatement {
+			generateGotoStatement(expression)
+		} else if let expression = statement as? CGLabelStatement {
+			generateLabelStatement(expression)
 		} else if let expression = statement as? CGExpression { // should be last but one
 			generateExpressionStatement(expression)
 		}
-
 		else {
 			assert(false, "unsupported statement found: \(typeOf(statement).ToString())")
 		}
@@ -681,6 +702,16 @@
 		assert(false, "generateConstructorCallStatement not implemented")
 	}
 
+	internal func generateGotoStatement(_ statement: CGGotoStatement) {
+		// descendant must override this or generateImports()
+		assert(false, "generateGotoStatement not implemented")
+	}
+
+	internal func generateLabelStatement(_ statement: CGLabelStatement) {
+		// descendant must override this or generateImports()
+		assert(false, "generateLabelStatement not implemented")
+	}
+
 	internal func generateStatementTerminator() {
 		AppendLine(";")
 	}
@@ -701,6 +732,7 @@
 			generateExpression(expression)
 		}
 	}
+
 	internal final func generateExpression(_ expression: CGExpression) {
 		// descendant should not override
 
@@ -750,6 +782,8 @@
 			generateIfThenElseExpression(expression)
 		} else if let expression = expression as? CGLocalVariableAccessExpression {
 			generateLocalVariableAccessExpression(expression)
+		} else if let expression = expression as? CGEventAccessExpression {
+			generateEventAccessExpression(expression)
 		} else if let expression = expression as? CGFieldAccessExpression {
 			generateFieldAccessExpression(expression)
 		} else if let expression = expression as? CGArrayElementAccessExpression {
@@ -772,6 +806,8 @@
 			generateIntegerLiteralExpression(expression)
 		} else if let expression = expression as? CGFloatLiteralExpression {
 			generateFloatLiteralExpression(expression)
+		} else if let expression = expression as? CGImaginaryLiteralExpression {
+			generateImaginaryLiteralExpression(expression)
 		} else if let literalExpression = expression as? CGLanguageAgnosticLiteralExpression {
 			Append(valueForLanguageAgnosticLiteralExpression(literalExpression))
 		} else if let expression = expression as? CGArrayLiteralExpression {
@@ -925,6 +961,10 @@
 		assert(false, "generateFieldAccessExpression not implemented")
 	}
 
+	internal func generateEventAccessExpression(_ expression: CGEventAccessExpression) {
+		generateFieldAccessExpression(expression)
+	}
+
 	internal func generateArrayElementAccessExpression(_ expression: CGArrayElementAccessExpression) {
 		// descendant may override, but this will work for most languages.
 		generateExpression(expression.Array)
@@ -990,6 +1030,11 @@
 			case 10: Append(valueForLanguageAgnosticLiteralExpression(literalExpression))
 			default: throw Exception("Base \(literalExpression.Base) integer literals are not currently supported for this languages.")
 		}
+	}
+
+	internal func generateImaginaryLiteralExpression(_ literalExpression: CGImaginaryLiteralExpression) {
+		// descendant should override
+		assert(false, "generateImaginaryLiteralExpression not implemented")
 	}
 
 	internal func generateArrayLiteralExpression(_ expression: CGArrayLiteralExpression) {
@@ -1394,7 +1439,7 @@
 				if p > 0 {
 					Append(",")
 				}
-				generateTypeReference(param, ignoreNullability: true)
+				generateTypeReference(param, ignoreNullability: false)
 			}
 			Append(">")
 		}
@@ -1547,7 +1592,8 @@
 	internal var inConditionExpression = false
 
 	internal var positionedAfterPeriod: Boolean {
-		return (currentCode.ToString() as! String).EndsWith(".")
+		let length = currentCode.Length
+		return (length > 0) && (currentCode[length-1] == ".")
 	}
 
 	internal private(set) var currentLocation = CGLocation()
@@ -1637,5 +1683,19 @@
 				currentCode.Append(" ")
 			}
 		}
+	}
+
+	public final func ExpressionToString(_ expression: CGExpression) -> String {
+		currentCode = StringBuilder()
+
+		generateExpression(expression);
+		return currentCode.ToString()
+	}
+
+	public final func StatementToString(_ statement: CGStatement) -> String {
+		currentCode = StringBuilder()
+
+		generateStatement(statement);
+		return currentCode.ToString()
 	}
 }

@@ -259,6 +259,7 @@ public enum CGUnaryOperatorKind {
 	case Not
 	case AddressOf
 	case ForceUnwrapNullable
+	case BitwiseNot
 }
 
 public class CGBinaryOperatorExpression: CGExpression {
@@ -378,7 +379,25 @@ public class CGCharacterLiteralExpression: CGLiteralExpression {
 }
 
 public class CGIntegerLiteralExpression: CGLanguageAgnosticLiteralExpression {
-	public var Value: Int64 = 0
+	public var SignedValue: Int64? = nil {
+		didSet {
+			if SignedValue != nil {
+				UnsignedValue = nil
+			}
+		}
+	}
+	public var UnsignedValue: Int64? = nil {
+		didSet {
+			if UnsignedValue != nil {
+				SignedValue = nil
+			}
+		}
+	}
+
+	@Obsolete public var Value: Int64 {
+		return coalesce(SignedValue, UnsignedValue, 0)
+	}
+
 	public var Base = 10
 	public var NumberKind: CGNumberKind?
 
@@ -387,19 +406,31 @@ public class CGIntegerLiteralExpression: CGLanguageAgnosticLiteralExpression {
 	public init() {
 	}
 	public init(_ value: Int64) {
-		Value = value
+		SignedValue = value
 	}
 	public init(_ value: Int64, # base: Int32) {
-		Value = value
+		SignedValue = value
 		Base = base
 	}
-
+	public init(_ value: UInt64) {
+		UnsignedValue = value
+	}
+	public init(_ value: UInt64, # base: Int32) {
+		UnsignedValue = value
+		Base = base
+	}
 	override func StringRepresentation() -> String {
-		return Convert.ToString(Value, 10)
+		return StringRepresentation(base: Base)
 	}
 
-	internal func StringRepresentation(# base: Int32) -> String {
-		return Convert.ToString(Value, base)
+	internal func StringRepresentation(base: Int32) -> String {
+		if let SignedValue = SignedValue {
+			return Convert.ToString(SignedValue, base)
+		} else if let UnsignedValue = UnsignedValue {
+			return Convert.ToString(UnsignedValue, base)
+		} else {
+			return Convert.ToString(0, base)
+		}
 	}
 }
 
@@ -425,25 +456,29 @@ public class CGFloatLiteralExpression: CGLanguageAgnosticLiteralExpression {
 	}
 
 	override func StringRepresentation() -> String {
-		if let value = DoubleValue {
-			return Convert.ToStringInvariant(value) // todo: force dot into float literal?
-		} else if let value = IntegerValue {
-			return value.ToString()+".0"
-		} else if let value = StringValue {
-			if value.IndexOf(".") > -1 || value.ToLower().IndexOf("e") > -1 {
-				return value
-			} else {
-				return value+".0"
-			}
-		} else {
-			return "0.0"
-		}
+		return StringRepresentation(base: 10)
 	}
 
 	internal func StringRepresentation(# base: Int32) -> String {
 		switch base {
 			case 10:
-				return StringRepresentation()
+				if let value = DoubleValue {
+					var result = Convert.ToStringInvariant(value)
+					if !result.Contains(".") {
+						result += ".0";
+					}
+					return result
+				} else if let value = IntegerValue {
+					return value.ToString()+".0"
+				} else if let value = StringValue {
+					if value.IndexOf(".") > -1 || value.ToLower().IndexOf("e") > -1 {
+						return value
+					} else {
+						return value+".0"
+					}
+				} else {
+					return "0.0"
+				}
 			case 16:
 				if DoubleValue != nil {
 					throw Exception("base 16 (Hex) float literals with double value are not currently supported.")
@@ -461,6 +496,12 @@ public class CGFloatLiteralExpression: CGLanguageAgnosticLiteralExpression {
 			default:
 				throw Exception("Base \(base) float literals are not currently supported.")
 		}
+	}
+}
+
+public class CGImaginaryLiteralExpression: CGFloatLiteralExpression {
+	internal override func StringRepresentation(# base: Int32) -> String {
+		return super.StringRepresentation(base: base)+"i";
 	}
 }
 
@@ -630,6 +671,9 @@ public __abstract class CGMemberAccessExpression : CGExpression {
 }
 
 public class CGFieldAccessExpression : CGMemberAccessExpression {
+}
+
+public class CGEventAccessExpression : CGFieldAccessExpression {
 }
 
 public class CGEnumValueAccessExpression : CGExpression {

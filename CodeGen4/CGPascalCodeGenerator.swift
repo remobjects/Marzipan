@@ -454,6 +454,18 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		generateStatementTerminator()
 	}
 
+	override func generateGotoStatement(_ statement: CGGotoStatement) {
+		Append("goto ");
+		Append(statement.Target);
+		generateStatementTerminator();
+	}
+
+	override func generateLabelStatement(_ statement: CGLabelStatement) {
+		Append(statement.Name);
+		Append(":");
+		generateStatementTerminator();
+	}
+
 	override func generateConstructorCallStatement(_ statement: CGConstructorCallStatement) {
 		if let callSite = statement.CallSite {
 			generateExpression(callSite)
@@ -621,6 +633,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		switch (`operator`) {
 			case .Plus: Append("+")
 			case .Minus: Append("-")
+			case .BitwiseNot: if inConditionExpression { Append("NOT ") } else { Append("not ") }
 			case .Not: if inConditionExpression { Append("NOT ") } else { Append("not ") }
 			case .AddressOf: Append("@")
 			case .ForceUnwrapNullable: Append("{ NOT SUPPORTED }")
@@ -684,7 +697,13 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			if callSite is CGInheritedExpression {
 				Append(" ")
 			} else {
-				Append(".")
+				if (expression.Name != "") {
+					if expression.NilSafe {
+						Append(":")
+					} else {
+						Append(".")
+						}
+				}
 				return false
 			}
 		}
@@ -784,7 +803,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 								case .Interface: self.Append(" is interface")
 							}
 						} else {
-							assert(false, "Unsupported constraint type \(constraint)")
+							self.assert(false, "Unsupported constraint type \(constraint)")
 						}
 					}
 				}
@@ -1050,6 +1069,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	override func generateAliasType(_ type: CGTypeAliasDefinition) {
 		generateIdentifier(type.Name)
 		Append(" = ")
+		pascalGenerateTypeVisibilityPrefix(type.Visibility)
 		generateTypeReference(type.ActualType)
 		generateStatementTerminator()
 	}
@@ -1066,6 +1086,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 
 		helpGenerateCommaSeparatedList(type.Members) { m in
 			if let member = m as? CGEnumValueDefinition {
+				self.generateAttributes(member.Attributes, inline: true)
 				self.generateIdentifier(member.Name)
 				if let value = member.Value {
 					self.Append(" = ")
@@ -1199,10 +1220,12 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	override func generateTypeMembers(_ type: CGTypeDefinition) {
 		if isUnified {
 			if type.Members.Count > 0 {
-				decIndent()
-				AppendLine("private")
-				incIndent()
-				AppendLine()
+				if !(type is CGInterfaceTypeDefinition) {
+					decIndent()
+					AppendLine("private")
+					incIndent()
+					AppendLine()
+				}
 				super.generateTypeMembers(type)
 				// Todo: generate property and event implementations.
 				AppendLine()
@@ -1416,7 +1439,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 
 	override func generateMethodDefinition(_ method: CGMethodDefinition, type: CGTypeDefinition) {
 		pascalGenerateMethodHeader(method, type: type, methodKeyword:pascalKeywordForMethod(method), implementation: false, includeVisibility: isUnified)
-		if isUnified {
+		if isUnified && !(type is CGInterfaceTypeDefinition) {
 			if (method.Virtuality != CGMemberVirtualityKind.Abstract) && !method.External && !method.Empty {
 				pascalGenerateMethodBody(method, type: type)
 			}
@@ -1511,6 +1534,10 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			}
 		}
 
+		if field.Volatile {
+			Append("; volatile")
+		}
+
 		if isUnified {
 			Append("; ")
 			pascalGenerateMemberVisibilityKeyword(field.Visibility)
@@ -1545,6 +1572,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			}
 			self.Append("read")
 		}
+
 		func appendWrite() {
 			self.Append(" ")
 			if let v = property.SetterVisibility {
@@ -1622,16 +1650,27 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			Append(" default;")
 		}
 		pascalGenerateVirtualityModifiders(property)
-		AppendLine()
+		AppendLine();
+
+		if isUnified && !(type is CGInterfaceTypeDefinition) {
+			AppendLine();
+			pascalGeneratePropertyAccessorDefinition(property, type: type);
+		}
 	}
 
 	func pascalGeneratePropertyAccessorDefinition(_ property: CGPropertyDefinition, type: CGTypeDefinition) {
 		if !definitionOnly {
+			var isAppendLineNeeded: Boolean = false;
+
 			if let getStatements = property.GetStatements, let getterMethod = property.GetterMethodDefinition() {
-				generateMethodDefinition(getterMethod, type: type)
+				generateMethodDefinition(getterMethod, type: type);
+				isAppendLineNeeded = true;
 			}
 			if let setStatements = property.SetStatements, let setterMethod = property.SetterMethodDefinition() {
-				generateMethodDefinition(setterMethod!, type: type)
+				if isAppendLineNeeded && isUnified {
+					AppendLine();
+				}
+				generateMethodDefinition(setterMethod, type: type);
 			}
 		}
 	}
@@ -1641,7 +1680,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			pascalGenerateMethodImplementation(property.GetterMethodDefinition()!, type: type)
 		}
 		if let setStatements = property.SetStatements {
-			pascalGenerateMethodImplementation(property.GetterMethodDefinition()!, type: type)
+			pascalGenerateMethodImplementation(property.SetterMethodDefinition()!, type: type)
 		}
 	}
 
