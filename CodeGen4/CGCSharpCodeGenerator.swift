@@ -41,19 +41,21 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 			generateImport(i)
 		}
 		AppendLine()
-		Append("namespace")
 		if let namespace = currentUnit.Namespace {
+			Append("namespace")
 			Append(" ")
 			generateIdentifier(namespace.Name, alwaysEmitNamespace: true)
+			AppendLine()
+			AppendLine("{")
+			incIndent()
 		}
-		AppendLine()
-		AppendLine("{")
-		incIndent()
 	}
 
 	override func generateFooter() {
-		decIndent()
-		AppendLine("}")
+		if let namespace = currentUnit.Namespace {
+			decIndent()
+			AppendLine("}")
+		}
 	}
 
 	override func generateImports() {
@@ -378,7 +380,7 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 	override func generateAnonymousMethodExpression(_ method: CGAnonymousMethodExpression) {
 		Append("(")
 		helpGenerateCommaSeparatedList(method.Parameters) { param in
-			self.generateIdentifier(param.Name)
+			self.generateParameterDefinition(param)
 		}
 		AppendLine(") => {")
 		incIndent()
@@ -533,7 +535,9 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 			case .Params: Append("params ")
 			default:
 		}
-		generateTypeReference(param.`Type`)
+		if let type = param.`Type` {
+			generateTypeReference(type)
+		}
 		Append(" ")
 		generateIdentifier(param.Name)
 		if let defaultValue = param.DefaultValue {
@@ -847,8 +851,10 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 			case .Abstract: Append("abstract ")
 			case .Override: Append("override ")
 			case .Final: Append("sealed ")
-			case .Reintroduce: Append("new ")
 			default:
+		}
+		if member.Reintroduced {
+			Append("new ")
 		}
 	}
 
@@ -1156,8 +1162,11 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 		generateIdentifier(field.Name)
 		if fixedArrayType {
 			Append("[");
-			let arr = field.Type as! CGArrayTypeReference
-			Append("" + (arr.Bounds[0].End - arr.Bounds[0].Start + 1));
+			if let array = field.Type as? CGArrayTypeReference {
+				if let bounds = array.Bounds {
+					Append("" + (bounds[0].End - bounds[0].Start + 1));
+				}
+			}
 			Append("]");
 		}
 		if let value = field.Initializer {
@@ -1477,18 +1486,20 @@ public class CGCSharpCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateArrayTypeReference(_ array: CGArrayTypeReference, ignoreNullability: Boolean = false) {
 		generateTypeReference(array.`Type`)
-		var bounds = array.Bounds.Count
-		if bounds == 0 {
-			bounds = 1
-		}
-		for b in 0 ..< bounds {
+		if let bounds = array.Bounds {
+			var count = bounds.Count
+			if count == 0 {
+				count = 1
+			}
+			for b in 0 ..< count {
+				Append("[]")
+			}
+		} else {
 			Append("[]")
 		}
 		if !ignoreNullability {
 			cSharpGenerateSuffixForNullability(array)
 		}
-
-		// bounds are not supported in C#
 	}
 
 	override func generateDictionaryTypeReference(_ type: CGDictionaryTypeReference, ignoreNullability: Boolean = false) {

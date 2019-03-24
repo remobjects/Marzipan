@@ -582,8 +582,10 @@
 			case .Abstract: Append("MustOverride ")
 			case .Override: Append("Overrides ")
 			case .Final: Append("NotOverridable ")
-			case .Reintroduce: Append("Shadows ")
 			default:
+		}
+		if member.Reintroduced {
+			Append("Shadows ")
 		}
 	}
 
@@ -596,8 +598,10 @@
 			default:
 		}
 		generateIdentifier(param.Name)
-		Append(" As ")
-		generateTypeReference(param.`Type`)
+		if let type = param.`Type` {
+			Append(" As ")
+			generateTypeReference(type)
+		}
 		if let defaultValue = param.DefaultValue {
 			Append(" = ")
 			generateExpression(defaultValue)
@@ -1050,11 +1054,11 @@
 
 	}
 
-	override func generateArrayTypeReference(_ type: CGArrayTypeReference, ignoreNullability: Boolean = false) {
-		generateTypeReference(type.`Type`)
+	override func generateArrayTypeReference(_ array: CGArrayTypeReference, ignoreNullability: Boolean = false) {
+		generateTypeReference(array.`Type`)
 		Append("()")
-		if let bounds = type.Bounds, bounds.Count > 0 {
-			for b in 1 ..< type.Bounds.Count {
+		if let bounds = array.Bounds, bounds.Count > 0 {
+			for b in 1 ..< bounds.Count {
 				Append("()")
 			}
 		}

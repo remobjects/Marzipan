@@ -519,7 +519,10 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 		if param.Modifier == .Params {
 			Append("...")
 		}
-		generateTypeReference(param.`Type`)
+		if let type = param.`Type` {
+			Append(": ")
+			generateTypeReference(type)
+		}
 		//switch param.Modifier {
 			//case .Out:
 				//if Dialect == CGGoCodeGeneratorDialect.Gold {
@@ -811,7 +814,7 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 			//case .Abstract: if Dialect == CGGoCodeGeneratorDialect.Gold { Append(" __abstract") }
 			//case .Override: Append(" override")
 			//case .Final: Append(" final")
-			//case .Reintroduce: break;
+			//case .Reintroduced: break;
 		//}
 		//if appendSpace {
 			//Append(" ")
@@ -1224,28 +1227,31 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateArrayTypeReference(_ array: CGArrayTypeReference, ignoreNullability: Boolean = false) {
 
-		var bounds = array.Bounds.Count
-		if bounds == 0 {
-			bounds = 1
+		if let bounds = array.Bounds {
+			var count = bounds.Count
+			if count == 0 {
+				count = 1
+			}
+			switch (array.ArrayKind) {
+				case .Static:
+					fallthrough
+				case .Dynamic:
+					Append(goSuffixForNullabilityForCollectionType(array.`Type`))
+					for b in 0 ..< count {
+						Append("[")
+						Append(b.ToString());
+						Append("]")
+					}
+					generateTypeReference(array.`Type`)
+					//if !ignoreNullability {
+						//Append(goSuffixForNullability(array.Nullability, defaultNullability: .NotNullable))
+					//}
+				case .HighLevel:
+					assert(false, "generateDictionaryTypeReference is not supported for Go")
+			}
+		} else {
+			Append("[]")
 		}
-		switch (array.ArrayKind) {
-			case .Static:
-				fallthrough
-			case .Dynamic:
-				Append(goSuffixForNullabilityForCollectionType(array.`Type`))
-				for b in 0 ..< bounds {
-					Append("[")
-					Append(b.ToString());
-					Append("]")
-				}
-				generateTypeReference(array.`Type`)
-				//if !ignoreNullability {
-					//Append(goSuffixForNullability(array.Nullability, defaultNullability: .NotNullable))
-				//}
-			case .HighLevel:
-				assert(false, "generateDictionaryTypeReference is not supported for Go")
-		}
-		// bounds are not supported for Go
 	}
 
 	override func generateDictionaryTypeReference(_ type: CGDictionaryTypeReference, ignoreNullability: Boolean = false) {

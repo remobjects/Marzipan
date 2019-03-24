@@ -412,7 +412,11 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 				case .Out:   self.Append("/* out */ ")
 				default:
 			}
-			self.generateTypeReference(param.`Type`)
+			if let type = param.`Type` {
+				self.generateTypeReference(type)
+			} else {
+				self.assert("CGParameterDefinition needs a type, for Objective-C")
+			}
 			switch param.Modifier {
 				case .Var: self.Append(" &")
 				case .Out: self.Append(" &")
@@ -760,8 +764,10 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 				switch (method.Virtuality) {
 					case .Virtual:       Append("virtual ");
 					case .Override:       Append("virtual ");
-					case .Reintroduce: if isCBuilder() { Append("HIDESBASE "); }
 					default: // ????
+				}
+				if method.Reintroduced {
+					Append(" HIDESBASE ")
 				}
 			}
 		}
@@ -1005,12 +1011,14 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 			}
 		}
 		generateTypeReference(type.`Type`)
-		var bounds = type.Bounds.Count
-		if bounds == 0 {
-			bounds = 1
-		}
-		for b in 0 ..< bounds {
-			Append("[]")
+		if let bounds = type.Bounds {
+			var count = bounds.Count
+			if count == 0 {
+				count = 1
+			}
+			for b in 0 ..< count {
+				Append("[]")
+			}
 		}
 	}
 

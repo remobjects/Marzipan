@@ -284,8 +284,10 @@
 			default:
 		}
 		generateIdentifier(param.Name)
-		Append(": ")
-		generateTypeReference(param.`Type`)
+		if let type = param.`Type` {
+			Append(": ")
+			generateTypeReference(type)
+		}
 		if let defaultValue = param.DefaultValue {
 			Append(" := ")
 			generateExpression(defaultValue)
@@ -443,8 +445,10 @@
 			case .Abstract: Append(" abstract;")
 			case .Override: Append(" override;")
 			case .Final: Append(" final;")
-			case .Reintroduce: Append(" reintroduce;")
 			default:
+		}
+		if member.Reintroduced {
+			Append(" reintroduce;")
 		}
 	}
 

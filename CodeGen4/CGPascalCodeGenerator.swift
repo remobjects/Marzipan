@@ -566,8 +566,9 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 	override func generateAnonymousMethodExpression(_ method: CGAnonymousMethodExpression) {
 		if method.Lambda {
 			Append("(")
-			helpGenerateCommaSeparatedList(method.Parameters) {param in
-				self.generateIdentifier(param.Name)
+			helpGenerateCommaSeparatedList(method.Parameters) { param in
+				self.generateAttributes(param.Attributes, inline: true)
+				self.generateParameterDefinition(param)
 			}
 			Append(") -> ")
 			if method.Statements.Count == 1, let expression = method.Statements[0] as? CGExpression {
@@ -615,6 +616,12 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		Append("(")
 		generateExpression(expression.PointerExpression)
 		Append(")^")
+	}
+
+	override func generateRangeExpression(_ expression: CGRangeExpression) {
+		generateExpression(expression.StartValue)
+		Append("..")
+		generateExpression(expression.EndValue)
 	}
 
 	/*
@@ -726,30 +733,35 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		}
 	}
 
+	override func generateParameterDefinition(_ param: CGParameterDefinition) {
+		if let exp = param.`Type` as? CGConstantTypeReference {
+			self.Append("const ")
+		} else {
+			switch param.Modifier {
+				case .Var: self.Append("var ")
+				case .Const: self.Append("const ")
+				case .Out: self.Append("out ")
+				case .Params: self.Append("params ") //todo: Oxygene ony?
+				default:
+			}
+		}
+		self.generateIdentifier(param.Name)
+		if let type = param.`Type` {
+			self.Append(": ")
+			self.generateTypeReference(type)
+		}
+		if let defaultValue = param.DefaultValue {
+			self.Append(" = ")
+			self.generateExpression(defaultValue)
+		}
+	}
+
 	func pascalGenerateDefinitionParameters(_ parameters: List<CGParameterDefinition>, implementation: Boolean) {
 		helpGenerateCommaSeparatedList(parameters, separator: { self.Append("; ") }) { param in
 			if !implementation {
 				self.generateAttributes(param.Attributes, inline: true)
 			}
-			if let exp = param.`Type` as? CGConstantTypeReference {
-				self.Append("const ")
-			}
-			else {
-				switch param.Modifier {
-					case .Var: self.Append("var ")
-					case .Const: self.Append("const ")
-					case .Out: self.Append("out ")
-					case .Params: self.Append("params ") //todo: Oxygene ony?
-					default:
-				}
-			}
-			self.generateIdentifier(param.Name)
-			self.Append(": ")
-			self.generateTypeReference(param.`Type`)
-			if let defaultValue = param.DefaultValue {
-				self.Append(" = ")
-				self.generateExpression(defaultValue)
-			}
+			self.generateParameterDefinition(param)
 		}
 	}
 
@@ -1263,8 +1275,10 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 			case .Abstract: Append(" virtual; abstract;")
 			case .Override: Append(" override;")
 			//case .Final: /* Oxygene only*/
-			case .Reintroduce: Append(" reintroduce;")
 			default:
+		}
+		if member.Reintroduced {
+			Append(" reintroduce;")
 		}
 	}
 
@@ -1345,7 +1359,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		AppendLine()
 	}
 
-	internal func pascalGenerateMethodHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean, includeVisibility: Boolean = false) {
+	internal func pascalGenerateMethodHeader(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition?, methodKeyword: String, implementation: Boolean, includeVisibility: Boolean = false) {
 		if type is CGInterfaceTypeDefinition && method.Optional {
 			Append("[Optional] ")
 		}
@@ -1355,7 +1369,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 
 		Append(methodKeyword)
 		Append(" ")
-		if implementation && !(type is CGGlobalTypeDefinition) {
+		if let type = type, implementation && !(type is CGGlobalTypeDefinition) {
 			generateIdentifier(type.Name)
 			Append(".")
 		}
@@ -1385,7 +1399,7 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		pascalGenerateSecondHalfOfMethodHeader(method, implementation: implementation, includeVisibility: includeVisibility)
 	}
 
-	internal func pascalGenerateMethodBody(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition, allowLocalVariables: Boolean = true) {
+	internal func pascalGenerateMethodBody(_ method: CGMethodLikeMemberDefinition, type: CGTypeDefinition?, allowLocalVariables: Boolean = true) {
 		if allowLocalVariables {
 			if let localVariables = method.LocalVariables, localVariables.Count > 0 {
 				AppendLine("var")
@@ -1397,6 +1411,28 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 						generateTypeReference(type)
 						generateStatementTerminator()
 					}
+				}
+				decIndent()
+			}
+			if let localTypes = method.LocalTypes, localTypes.Count > 0 {
+				if self is CGOxygeneCodeGenerator {
+					assert("Local type definitions are not supported in Oxygene");
+
+				} else {
+					AppendLine("type")
+					incIndent()
+					for t in localTypes {
+						generateTypeDefinition(t);
+					}
+					decIndent()
+				}
+			}
+			if let localMethods = method.LocalMethods, localMethods.Count > 0 {
+				incIndent()
+				AppendLine()
+				for m in localMethods {
+					pascalGenerateMethodHeader(m, type: nil, methodKeyword: pascalKeywordForMethod(m), implementation: false)
+					pascalGenerateMethodBody(m, type: nil)
 				}
 				decIndent()
 			}
@@ -1776,15 +1812,17 @@ public __abstract class CGPascalCodeGenerator : CGCodeGenerator {
 		Append("array")
 		if let bounds = array.Bounds, bounds.Count > 0 {
 			Append("[")
-			for b in 0 ..< array.Bounds.Count {
-				let bound = array.Bounds[b]
-				if b > 0 {
-					Append(", ")
+			if let bounds = array.Bounds {
+				helpGenerateCommaSeparatedList(bounds) { bound in
+					self.Append(bound.Start.ToString())
+					self.Append("..")
+					if let end = bound.End {
+						self.Append(end.ToString())
+					}
 				}
-				Append(bound.Start.ToString())
-				Append("..")
-				if let end = bound.End {
-					Append(end.ToString())
+			} else if let boundsTypes = array.BoundsTypes {
+				helpGenerateCommaSeparatedList(boundsTypes) { boundsType in
+					self.generateTypeReference(boundsType, ignoreNullability: true)
 				}
 			}
 			Append("]")

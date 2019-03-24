@@ -467,7 +467,9 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 				default:
 			}
 		}
-		generateTypeReference(param.`Type`)
+		if let type = param.`Type` {
+			generateTypeReference(type)
+		}
 		Append(" ")
 		generateIdentifier(param.Name)
 		if let defaultValue = param.DefaultValue {
@@ -694,7 +696,7 @@ public class CGJavaCodeGenerator : CGCStyleCodeGenerator {
 			//case .None
 			//case .Virtual:
 			//case .Override:
-			//case .Reintroduce:
+			//case .Reintroduced:
 			case .Abstract: Append("abstract ")
 			case .Final: Append("final ")
 			default:
