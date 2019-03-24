@@ -68,6 +68,22 @@
     <Reference Include="System.Data.DataSetExtensions">
       <RequiredTargetFramework>3.5</RequiredTargetFramework>
     </Reference>
+    <Reference Include="Echoes">
+      <Private>True</Private>
+    </Reference>
+    <ProjectReference Include="CodeGen4.Echoes">
+      <HintPath>..\CodeGen4\bin\Debug\CodeGen4.dll</HintPath>
+      <Project>{2C3408F4-2270-4310-9A38-6A5296129576}</Project>
+      <ProjectFile>..\CodeGen4\CodeGen4.Echoes.elements</ProjectFile>
+      <Private>True</Private>
+    </ProjectReference>
+    <Reference Include="Elements">
+      <Private>True</Private>
+    </Reference>
+    <Reference Include="Swift">
+      <HintPath>..\..\..\Elements\Bin\References\Echoes\NET\Swift.dll</HintPath>
+      <Private>True</Private>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Importer.pas" />
@@ -86,20 +102,6 @@
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Properties\" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="Echoes">
-      <Private>True</Private>
-    </Reference>
-    <ProjectReference Include="CodeGen4.Echoes">
-      <HintPath>..\CodeGen4\bin\Debug\CodeGen4.dll</HintPath>
-      <Project>{2C3408F4-2270-4310-9A38-6A5296129576}</Project>
-      <ProjectFile>..\CodeGen4\CodeGen4.Echoes.elements</ProjectFile>
-      <Private>True</Private>
-    </ProjectReference>
-    <Reference Include="Elements">
-      <Private>True</Private>
-    </Reference>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Echoes.targets" />
   <PropertyGroup>

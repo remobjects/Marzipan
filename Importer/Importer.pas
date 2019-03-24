@@ -87,7 +87,7 @@ begin
   fSettings := aSettings;
   fCodeGenerator := aCodeGenerator;
   fImportNameMapping.Add('System.Object', 'MZObject');
-  fImportNameMapping.Add('System.String', 'NSString');
+  fImportNameMapping.Add('System.String', 'String');
   fImportNameMapping.Add('System.DateTime', 'MZDateTime');
   fImportNameMapping.Add('System.SByte', 'int8_t');
   fImportNameMapping.Add('System.Byte', 'uint8_t');
@@ -562,7 +562,7 @@ end;
 method Importer.GetMarzipanType(aType: TypeReference): CGTypeReference;
 begin
   if aType.FullName = 'System.Void' then exit nil;
-  if aType.FullName = 'System.String' then exit new CGNamedTypeReference('NSString');
+  if aType.FullName = 'System.String' then exit new CGNamedTypeReference('String');
   if aType.FullName = 'System.DateTime' then exit new CGNamedTypeReference('MZDateTime');;
   if aType.IsPinned then exit GetMonoType(aType.GetElementType);
   if aType.IsPointer then exit new CGPointerTypeReference(GetMonoType(aType.GetElementType));
@@ -640,7 +640,7 @@ end;
 
 method Importer.WrapObject(aVal: CGExpression; aType: CGTypeReference): CGExpression;
 begin
-  if CGNamedTypeReference(aType):Name = 'NSString' then begin
+  if CGNamedTypeReference(aType):Name = 'String' then begin
     exit
     new CGMethodCallExpression(new CGNamedIdentifierExpression('MZString'), 'NSStringWithMonoString', [new CGCallParameter(aVal, "")]);
   end;
