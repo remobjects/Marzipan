@@ -108,25 +108,25 @@ public class CGAwaitExpression: CGExpression {
 public class CGAnonymousMethodExpression: CGExpression {
 	public var Lambda = true
 
-	public var Parameters: List<CGAnonymousMethodParameterDefinition>
+	public var Parameters: List<CGParameterDefinition>
 	public var ReturnType: CGTypeReference?
 	public var Statements: List<CGStatement>
 	public var LocalVariables: List<CGVariableDeclarationStatement>? // Legacy Delphi only.
 
 	public init(_ statements: List<CGStatement>) {
 		super.init()
-		Parameters = List<CGAnonymousMethodParameterDefinition>()
+		Parameters = List<CGParameterDefinition>()
 		Statements = statements
 	}
 	public convenience init(_ statements: CGStatement...) {
 		init(statements.ToList())
 	}
-	public init(_ parameters: List<CGAnonymousMethodParameterDefinition>, _ statements: List<CGStatement>) {
+	public init(_ parameters: List<CGParameterDefinition>, _ statements: List<CGStatement>) {
 		super.init()
 		Statements = statements
 		Parameters = parameters
 	}
-	public convenience init(_ parameters: CGAnonymousMethodParameterDefinition[], _ statements: CGStatement[]) {
+	public convenience init(_ parameters: CGParameterDefinition[], _ statements: CGStatement[]) {
 		init(parameters.ToList(), statements.ToList())
 	}
 }
@@ -231,6 +231,16 @@ public class CGParenthesesExpression: CGExpression {
 
 	public init(_ value: CGExpression) {
 		Value = value
+	}
+}
+
+public class CGRangeExpression: CGExpression {
+	public var StartValue: CGExpression
+	public var EndValue: CGExpression
+
+	public init(_ startValue: CGExpression, _ endValue: CGExpression) {
+		StartValue = startValue
+		EndValue = endValue
 	}
 }
 
