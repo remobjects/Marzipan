@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <ProjectGuid>{BA07E348-1D49-454F-AE2D-AB6AB8821206}</ProjectGuid>
+    <OutputType>Import</OutputType>
+    <AssemblyName>libMono-2.0</AssemblyName>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <Mode>Toffee</Mode>
+    <SDK>macOS</SDK>
+    <ImportSearchPath>/Users/mh/Code/_Frameworks/Mono4___master_14Jun15/include/mono-2.0</ImportSearchPath>
+    <ImportCodeGen>Oxygene</ImportCodeGen>
+    <KnownConditionalDefines>NEW_DEFINE</KnownConditionalDefines>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <OutputPath>.\Bin\Debug</OutputPath>
+    <ConditionalDefines>NEW_DEFINE</ConditionalDefines>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <OutputPath>.\Bin\Release</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Foundation" />
+    <Reference Include="rtl" />
+  </ItemGroup>
+  <ItemGroup>
+    <ImportHeader Include="libmono.h" />
+    <ImportBlacklist Include="mono/metadata/debug-mono-symfile.h" />
+    <ImportBlacklist Include="mono/metadata/sgen-bridge.h" />
+    <ImportBlacklist Include="mono/metadata/verify.h" />
+    <ImportLinkLibrary Include="/Users/mh/Code/_Frameworks/Mono4___master_14Jun15/lib/libmono-2.0.dylib">
+      <Private>True</Private>
+    </ImportLinkLibrary>
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.targets" />
+</Project>
