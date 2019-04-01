@@ -9,11 +9,9 @@
     <SDK>macOS</SDK>
     <ImportSearchPath>/Users/mh/Code/_Frameworks/Mono4___master_14Jun15/include/mono-2.0</ImportSearchPath>
     <ImportCodeGen>Oxygene</ImportCodeGen>
-    <KnownConditionalDefines>NEW_DEFINE</KnownConditionalDefines>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <OutputPath>.\Bin\Debug</OutputPath>
-    <ConditionalDefines>NEW_DEFINE</ConditionalDefines>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
     <OutputPath>.\Bin\Release</OutputPath>
