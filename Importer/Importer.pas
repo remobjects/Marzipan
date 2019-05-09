@@ -16,11 +16,12 @@ uses
 type
   Importer = public class(IAssemblyResolver)
   private
-    class method GetTypeName(aTR: TypeReference): String;
+    method GetTypeName(aTR: TypeReference): String;
     begin
       if aTR is GenericInstanceType then
         exit aTR.Name.Replace('`', '')+'_'+String.Join('__', GenericInstanceType(aTR).GenericArguments.Select(a -> GetTypeName(a)));
-      exit aTR.Name;
+      var lRemap := fSettings.Types.FirstOrDefault(a -> a.Name = aTR.FullName);
+      exit coalesce(lRemap:TargetName, aTR.Name);
     end;
 
     class method FixType(aGI: TypeReference; aType: TypeReference): TypeReference;
@@ -103,6 +104,7 @@ begin
   fImportNameMapping.Add('System.Single', 'float');
   fImportNameMapping.Add('System.Double', 'double');
   fImportNameMapping.Add('System.Boolean', 'Boolean');
+  //fImportNameMapping.Add('System.Guid', 'SystemGuid');
 
   fReservedCocoaMemberNames.Add("description");
 end;
@@ -173,6 +175,7 @@ begin
       //if (meth.ReturnType.IsGenericInstance and meth.ReturnType.IsValueType) then continue;
       //if meth.Parameters.Any(a->a.ParameterType.IsGenericInstance and a.ParameterType.IsValueType) then continue;
       if not meth.IsPublic then continue;
+      if meth.Name.Contains('.') and not meth.Name.StartsWith('.') then continue;
 
       var lMonoSig := new CGBlockTypeDefinition('');
       lMonoSig.IsPlainFunctionPointer := true;
@@ -191,6 +194,7 @@ begin
 
       var lSignature := meth.Name;
       for each elpar in meth.Parameters do begin
+        elpar.Name := elpar.Name.Replace('.','_').Replace('$', '_').Replace('@', '_');
         var lParamType: CGTypeReference;
         if elpar.ParameterType.IsByReference then
           lParamType := new CGPointerTypeReference( GetMonoType(ByReferenceType(elpar.ParameterType).ElementType))
@@ -199,6 +203,7 @@ begin
 
         lMonoSig.Parameters.Add(new CGParameterDefinition('_' + elpar.Name, lParamType));
         lSignature := lSignature+"+"+lParamType.ToString;
+
       end;
 
       lMonoSig.Parameters.Add(new CGParameterDefinition('exception', new CGPointerTypeReference(new CGPointerTypeReference(new CGNamedTypeReference('MonoException')))));
