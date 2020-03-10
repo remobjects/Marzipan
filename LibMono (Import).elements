@@ -7,8 +7,8 @@
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <Mode>Toffee</Mode>
     <SDK>macOS</SDK>
-    <ImportSearchPath>/Users/mh/Code/_Frameworks/Mono4___master_14Jun15/include/mono-2.0</ImportSearchPath>
     <ImportCodeGen>Oxygene</ImportCodeGen>
+    <ImportSearchPaths>/Users/mh/Code/_Frameworks/Mono6.1_3May2019_cae7795/include/mono-2.0</ImportSearchPaths>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <OutputPath>.\Bin\Debug</OutputPath>
@@ -25,9 +25,7 @@
     <ImportBlacklist Include="mono/metadata/debug-mono-symfile.h" />
     <ImportBlacklist Include="mono/metadata/sgen-bridge.h" />
     <ImportBlacklist Include="mono/metadata/verify.h" />
-    <ImportLinkLibrary Include="/Users/mh/Code/_Frameworks/Mono4___master_14Jun15/lib/libmono-2.0.dylib">
-      <Private>True</Private>
-    </ImportLinkLibrary>
+    <AppFramework Include="..\..\_Frameworks\Mono6.1_3May2019_cae7795\lib\libmono-2.0.dylib" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.targets" />
 </Project>
