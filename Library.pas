@@ -33,6 +33,8 @@ type
   public
     constructor withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
     constructor withNSArray(aArray: NSArray);
+    //constructor withArray<T>(aArray: array of T);
+    constructor withArray(aArray: array of String);
     property &type: &Class := typeOf(MZObject);
     property elements: ^^MonoObject read ^^MonoObject(mono_array_addr_with_size(^MonoArray(__instance), sizeOf(^MonoObject), 0));
     property count: NSUInteger read mono_array_length(^MonoArray(__instance));
@@ -58,6 +60,7 @@ type
   public
     property &type: &Class := typeOf(MZObject);
     constructor withNSArray(aNSArray: NSArray);
+    constructor withObject(aObject: id);
     constructor withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
     method clear;
     property count: NSUInteger read get_count;
@@ -161,6 +164,29 @@ begin
   end;
 end;
 
+//constructor MZArray withArray<T>(aArray: array of T);
+//begin
+  //if length(aArray) > 0 then begin
+    //self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, (aArray[0] as MZObject).getClass(), length(aArray)) as ^MonoObject);
+    //for i: Integer := 0 to length(aArray)-1 do begin
+      //var lInst := MZObject(aArray[i]):__instance;
+      //elements[i] := lInst;
+    //end;
+  //end
+  //else begin
+    //self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(MZMonoRuntime.sharedInstance.getCoreType('System.Object').type), 0) as ^MonoObject);
+  //end;
+//end;
+
+constructor MZArray withArray(aArray: array of String);
+begin
+  self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(MZString.getType.type), length(aArray)) as ^MonoObject);
+  for i: Integer := 0 to length(aArray)-1 do begin
+    var lInst := MZString.MonoStringWithNSString(aArray[i]) as ^MonoObject;
+    elements[i] := lInst;
+  end;
+end;
+
 method MZArray.objectAtIndex(aIndex: Integer): id;
 begin
   var lItem := elements[aIndex];
@@ -221,6 +247,11 @@ end;
 constructor MZObjectList withNSArray(aNSArray: NSArray);
 begin
   fNSArray := aNSArray;
+end;
+
+constructor MZObjectList withObject(aObject: id);
+begin
+  fNSArray := NSArray.arrayWithObject(aObject);
 end;
 
 constructor MZObjectList withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
