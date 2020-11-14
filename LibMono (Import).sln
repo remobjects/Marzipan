@@ -1,0 +1,20 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# RemObjects Fire
+Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "LibMono (Import)", "LibMono (Import).elements", "{BA07E348-1D49-454F-AE2D-AB6AB8821206}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|AnyCPU = Debug|AnyCPU
+		Release|AnyCPU = Release|AnyCPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Release|AnyCPU.Build.0 = Release|AnyCPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

@@ -8,7 +8,9 @@
     <Mode>Toffee</Mode>
     <SDK>macOS</SDK>
     <ImportCodeGen>Oxygene</ImportCodeGen>
-    <ImportSearchPaths>/Users/mh/Code/_Frameworks/Mono6.1_3May2019_cae7795/include/mono-2.0</ImportSearchPaths>
+    <ImportSearchPaths>/Users/mh/Code/Frameworks/FireMono/include/mono-2.0</ImportSearchPaths>
+    <Architecture>x86_64;arm64</Architecture>
+    <DeploymentTargetVersion>10.13</DeploymentTargetVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <OutputPath>.\Bin\Debug</OutputPath>
@@ -25,7 +27,9 @@
     <ImportBlacklist Include="mono/metadata/debug-mono-symfile.h" />
     <ImportBlacklist Include="mono/metadata/sgen-bridge.h" />
     <ImportBlacklist Include="mono/metadata/verify.h" />
-    <AppFramework Include="..\..\_Frameworks\Mono6.1_3May2019_cae7795\lib\libmono-2.0.dylib" />
+    <ImportLinkLibrary Include="..\..\Frameworks\FireMono\lib\libmono-2.0.dylib">
+      <Private>True</Private>
+    </ImportLinkLibrary>
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.targets" />
 </Project>
