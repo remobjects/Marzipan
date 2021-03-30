@@ -481,12 +481,13 @@ begin
 
   for each el in fValueTypes.ToList() index n do begin
     var lTypeDef := new CGStructTypeDefinition(fImportNameMapping[el.FullName]);
+    if el.FullName = 'System.Guid' then continue;
     lTypeDef.Comment := new CGCommentStatement('Import of '+el.FullName+' from '+el.Scope.Name);
     lTypeDef.Visibility := CGTypeVisibilityKind.Public;
 
     for each lConst in el.Resolve.Fields.Where(a->a.IsStatic = false) do begin
       lTypeDef.Members.Add(
-        new CGFieldDefinition(lConst.Name, GetMonoType(FixType(el, lConst.FieldType)), Visibility := CGMemberVisibilityKind.Public));
+        new CGFieldDefinition(lConst.Name.Replace('@', '_'), GetMonoType(FixType(el, lConst.FieldType)), Visibility := CGMemberVisibilityKind.Public));
     end;
 
     if not fUnit.Types.Contains(lTypeDef) then
