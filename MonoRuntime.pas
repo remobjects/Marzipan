@@ -41,8 +41,8 @@ type
     method runMain;
   public
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString);
-    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String);
-    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
+    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString);
+    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString) lib(aLibPath: NSString) etc(aETCPath: NSString);
 
     class property sharedInstance: MZMonoRuntime read get_sharedInstance;
 
@@ -132,7 +132,7 @@ begin
   result := initWithDomain(aDomain) appName(aAppName) version('v4.0.30319');
 end;
 
-constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String);
+constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString);
 begin
   if fInstance <> nil then raise new MZException withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
   if aVersion[0] = 'v' then
@@ -148,7 +148,7 @@ begin
   runMain();
 end;
 
-constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: String) lib(aLibPath: NSString) etc(aETCPath: NSString);
+constructor MZMonoRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString) lib(aLibPath: NSString) etc(aETCPath: NSString);
 begin
   if fInstance <> nil then raise new MZException  withName('OnlyOneMono') reason('Only one runtime per class') userInfo(nil);
   if aVersion[0] = 'v' then
