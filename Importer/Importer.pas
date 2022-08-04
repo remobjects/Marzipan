@@ -128,9 +128,13 @@ begin
       raise new Exception('Type "'+el.Name+'" was not found')
     else if (not lLib[0].IsValueType) then
       fTypes.Add(lLib[0], lNewName);
-    Log('Adding type '+lNewName+' from '+lLib[0].FullName);
-    if (not lLib[0].IsValueType) and (not fImportNameMapping.ContainsKey(lLib[0].FullName)) then
+    if (not lLib[0].IsValueType) and (not fImportNameMapping.ContainsKey(lLib[0].FullName)) then begin
+      Log('Adding type '+lNewName+' from '+lLib[0].FullName);
       fImportNameMapping.Add(lLib[0].FullName, lNewName);
+    end
+    else begin
+      Log('Skipping type '+lNewName+' from '+lLib[0].FullName+', already covered.');
+    end;
   end;
   fUnit := new CGCodeUnit();
   fUnit.HeaderComment := new CGCommentStatement('Marzipan import of '#13#10 + String.Join(#13#10, fLibraries.Select(a->'  '+a.Assembly.Name.ToString).ToArray));
