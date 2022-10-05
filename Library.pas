@@ -27,7 +27,7 @@ type
 
   MZDateTime = public int64_t;
 
-  MZArray = public class(MZObject)
+  MZArray = public class(MZObject, sequence of id)
   private
     fNSArray: NSArray;
   public
@@ -39,6 +39,7 @@ type
     property elements: ^^MonoObject read ^^MonoObject(mono_array_addr_with_size(^MonoArray(__instance), sizeOf(^MonoObject), 0));
     property count: NSUInteger read mono_array_length(^MonoArray(__instance));
     property «Count»: NSUInteger read count;
+    property Length: NSUInteger read count;
     method objectAtIndex(aIndex: Integer): id;
     method objectAtIndexedSubscript(aIndex: Integer): id;
     method setObject(aObject: NSObject) atIndexedSubscript(aValue: Integer);
@@ -180,8 +181,8 @@ end;
 
 constructor MZArray withArray(aArray: array of String);
 begin
-  self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(MZString.getType.type), length(aArray)) as ^MonoObject);
-  for i: Integer := 0 to length(aArray)-1 do begin
+  self := inherited initWithMonoInstance(mono_array_new(MZMonoRuntime.sharedInstance.domain, mono_class_from_mono_type(MZString.getType.type), RemObjects.Elements.System.length(aArray)) as ^MonoObject);
+  for i: Integer := 0 to RemObjects.Elements.System.length(aArray)-1 do begin
     var lInst := MZString.MonoStringWithNSString(aArray[i]) as ^MonoObject;
     elements[i] := lInst;
   end;
@@ -251,7 +252,7 @@ end;
 
 constructor MZObjectList withObject(aObject: id);
 begin
-  fNSArray := NSArray.arrayWithObject(aObject);
+  fNSArray := Foundation.NSArray.arrayWithObject(aObject);
 end;
 
 constructor MZObjectList withMonoInstance(aInst: ^MonoObject) elementType(aType: &Class);
