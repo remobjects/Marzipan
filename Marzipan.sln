@@ -1,15 +1,17 @@
 
 Microsoft Visual Studio Solution File, Format Version 12.00
 # RemObjects Fire
-Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "CodegGen4 (.NET)", "CodeGen4\CodeGen4.Echoes.elements", "{2C3408F4-2270-4310-9A38-6A5296129576}"
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "CodegGen4 (.NET)", "CodeGen4\CodeGen4.Echoes.elements", "{2c3408f4-2270-4310-9a38-6a5296129576}"
 EndProject
-Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "CodegGen4 (Shared)", "CodeGen4\Codegen4.Shared.elements", "{615FC69D-8D8A-4996-9D58-B042CD883941}"
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "CodegGen4 (Shared)", "CodeGen4\Codegen4.Shared.elements", "{615fc69d-8d8a-4996-9d58-b042cd883941}"
 EndProject
-Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "Importer", "Importer\Importer.elements", "{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}"
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "Importer", "Importer\Importer.elements", "{96b323d7-e89e-4a28-a6d3-050acb2aa50e}"
 EndProject
-Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "LibMono (Import)", "LibMono (Import).elements", "{BA07E348-1D49-454F-AE2D-AB6AB8821206}"
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "LibMono (Import)", "LibMono (Import).elements", "{ba07e348-1d49-454f-ae2d-ab6ab8821206}"
 EndProject
-Project("{656346D9-4656-40DA-A068-22D5425D4639}") = "RemObjects.Marzipan", "RemObjects.Marzipan.elements", "{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}"
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "RemObjects.Marzipan.Core", "RemObjects.Marzipan.Core\RemObjects.Marzipan.Core.elements", "{fdd173fc-78f5-4dfe-853e-8a9e092687f1}"
+EndProject
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "RemObjects.Marzipan.Mono", "RemObjects.Marzipan.Mono\RemObjects.Marzipan.Mono.elements", "{b8a8b4bb-61d3-49b0-bafe-99016e5b3225}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,22 +19,26 @@ Global
 		Release|AnyCPU = Release|AnyCPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
-		{2C3408F4-2270-4310-9A38-6A5296129576}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
-		{2C3408F4-2270-4310-9A38-6A5296129576}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
-		{2C3408F4-2270-4310-9A38-6A5296129576}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
-		{2C3408F4-2270-4310-9A38-6A5296129576}.Release|AnyCPU.Build.0 = Release|AnyCPU
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
-		{96B323D7-E89E-4A28-A6D3-050ACB2AA50E}.Release|AnyCPU.Build.0 = Release|AnyCPU
-		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
-		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
-		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
-		{BA07E348-1D49-454F-AE2D-AB6AB8821206}.Release|AnyCPU.Build.0 = Release|AnyCPU
-		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
-		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
-		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
-		{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{2c3408f4-2270-4310-9a38-6a5296129576}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{2c3408f4-2270-4310-9a38-6a5296129576}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{2c3408f4-2270-4310-9a38-6a5296129576}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{2c3408f4-2270-4310-9a38-6a5296129576}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{96b323d7-e89e-4a28-a6d3-050acb2aa50e}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{96b323d7-e89e-4a28-a6d3-050acb2aa50e}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{96b323d7-e89e-4a28-a6d3-050acb2aa50e}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{96b323d7-e89e-4a28-a6d3-050acb2aa50e}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{ba07e348-1d49-454f-ae2d-ab6ab8821206}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{ba07e348-1d49-454f-ae2d-ab6ab8821206}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{ba07e348-1d49-454f-ae2d-ab6ab8821206}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{ba07e348-1d49-454f-ae2d-ab6ab8821206}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{fdd173fc-78f5-4dfe-853e-8a9e092687f1}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{fdd173fc-78f5-4dfe-853e-8a9e092687f1}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{fdd173fc-78f5-4dfe-853e-8a9e092687f1}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{fdd173fc-78f5-4dfe-853e-8a9e092687f1}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{b8a8b4bb-61d3-49b0-bafe-99016e5b3225}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{b8a8b4bb-61d3-49b0-bafe-99016e5b3225}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{b8a8b4bb-61d3-49b0-bafe-99016e5b3225}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{b8a8b4bb-61d3-49b0-bafe-99016e5b3225}.Release|AnyCPU.Build.0 = Release|AnyCPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

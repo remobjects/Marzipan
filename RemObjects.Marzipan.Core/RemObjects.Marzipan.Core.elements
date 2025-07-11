@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <RootNamespace>RemObjects.Marzipan.Core</RootNamespace>
+    <ProjectGuid>{FDD173FC-78F5-4DFE-853E-8A9E092687F1}</ProjectGuid>
+    <OutputType>StaticLibrary</OutputType>
+    <AssemblyName>RemObjects.Marzipan.Core</AssemblyName>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <SDK>macOS</SDK>
+    <MangleTypeNames>True</MangleTypeNames>
+    <CreateHeaderFile>True</CreateHeaderFile>
+    <DefaultUses>RemObjects.Elements.RTL</DefaultUses>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <Optimize>False</Optimize>
+    <OutputPath>.\Bin\Debug</OutputPath>
+    <ConditionalDefines>DEBUG;TRACE;</ConditionalDefines>
+    <GenerateDebugInfo>True</GenerateDebugInfo>
+    <EnableAsserts>True</EnableAsserts>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <OutputPath>.\Bin\Release</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Foundation" />
+    <Reference Include="rtl" />
+    <Reference Include="libToffee" />
+    <Reference Include="libElements" />
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Library.pas" />
+    <Compile Include="NetCoreRuntime.pas" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Toffee.targets" />
+</Project>

@@ -2,7 +2,7 @@
 <Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003" DefaultTargets="Build" ToolsVersion="4.0">
   <PropertyGroup>
     <RootNamespace>RemObjects.Marzipan</RootNamespace>
-    <ProjectGuid>b8a8b4bb-61d3-49b0-bafe-99016e5b3225</ProjectGuid>
+    <ProjectGuid>{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}</ProjectGuid>
     <OutputType>StaticLibrary</OutputType>
     <AssemblyName>Marzipan</AssemblyName>
     <AllowGlobals>True</AllowGlobals>
@@ -13,7 +13,6 @@
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <SDK>OS X</SDK>
     <CreateHeaderFile>True</CreateHeaderFile>
-    <Name>RemObjects.Marzipan</Name>
     <BundleIdentifier>com.remObjects.marzipan</BundleIdentifier>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
@@ -47,9 +46,6 @@
   <ItemGroup>
     <Compile Include="Library.pas" />
     <Compile Include="MonoRuntime.pas" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="Properties\" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Toffee.targets" />
   <PropertyGroup>

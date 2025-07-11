@@ -10,6 +10,7 @@ uses
 
 type
   MZException = public class(NSException) end;
+
   MZMonoRuntime = public class
   private
     method object: MZType;
