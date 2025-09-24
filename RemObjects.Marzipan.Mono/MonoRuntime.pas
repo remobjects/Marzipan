@@ -475,7 +475,10 @@ end;
 
 method MZType.getMethodThunk(aSig: NSString): ^Void;
 begin
-  exit mono_method_get_unmanaged_thunk(getMethod(aSig));
+  var lMethod := getMethod(aSig);
+  result := mono_method_get_unmanaged_thunk(lMethod);
+  if not assigned(result) then
+    raise new NSException withName('BadMethod') reason (NSString.stringWithFormat('Could not obtain thunk for method "%@".', aSig)) userInfo(nil);
 end;
 
 method MZType.instantiate: ^MonoObject;
