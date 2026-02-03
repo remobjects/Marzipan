@@ -10,13 +10,13 @@ type
   private
     method get_length: Integer;
     method get_NSString: NSString;
-    class var fLengthDelegate: IntPtr;
-    class var fType: MZType := MZCoreRuntime.sharedInstance.getCoreType('System.String');
+    class var fLengthDelegate: ^Void;
+    class var fType: MZType := MZCoreRuntime.sharedInstance.getCoreType("System.String");
   public
     class method getType: MZType; override;
     class method stringWithNSString(s: NSString): MZString;
-    class method NetStringWithNSString(s: NSString): IntPtr;
-    class method NSStringWithNetString(s: IntPtr): NSString;
+    class method NetStringWithNSString(s: NSString): ^Void;
+    class method NSStringWithNetString(s: ^Void): NSString;
 
     property length: Integer read get_length;
     property NSString: NSString read get_NSString;
@@ -28,9 +28,9 @@ type
   private
     fNSArray: NSArray;
     fType: &Class;
-    class var fCountDelegate, fGetDelegate, fSetDelegate, fToNSArrayDelegate, fFromNSArrayDelegate, fFromStringArrayDelegate: IntPtr;
+    class var fCountDelegate, fGetDelegate, fSetDelegate, fToNSArrayDelegate, fFromNSArrayDelegate, fFromStringArrayDelegate: ^Void;
   public
-    constructor withNetInstance(aInst: IntPtr) elementType(aType: &Class);
+    constructor withNetInstance(aInst: ^Void) elementType(aType: &Class);
     constructor withNSArray(aArray: NSArray);
     constructor withArray(aArray: array of String);
     property &type: &Class read fType;
@@ -49,12 +49,12 @@ type
     fArray: MZArray;
     fNSArray: NSArray;
     fType: &Class;
-    class var fCountDelegate, fGetDelegate, fClearDelegate, fToNSArrayDelegate, fFromNSArrayDelegate, fFromObjectDelegate: IntPtr;
+    class var fCountDelegate, fGetDelegate, fClearDelegate, fToNSArrayDelegate, fFromNSArrayDelegate, fFromObjectDelegate: ^Void;
   public
     property &type: &Class read fType;
     constructor withNSArray(aNSArray: NSArray);
     constructor withObject(aObject: id);
-    constructor withNetInstance(aInst: IntPtr) elementType(aType: &Class);
+    constructor withNetInstance(aInst: ^Void) elementType(aType: &Class);
     method clear;
     property count: NSUInteger read get_count;
     method objectAtIndex(aIndex: Integer): id;
@@ -75,8 +75,8 @@ type
 
   NSString_Marzipan_Helpers = public extension class(NSString)
   public
-    class method stringwithNetString(s: IntPtr): NSString;
-    method NetString: IntPtr;
+    class method stringwithNetString(s: ^Void): NSString;
+    method NetString: ^Void;
   end;
 
 implementation
@@ -91,8 +91,8 @@ end;
 method MZString.get_length: Integer;
 begin
   if fLengthDelegate = nil then
-    fLengthDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.StringHelpers', 'GetLength');
-  var lFunc: function(aInstance: IntPtr): Integer;
+    fLengthDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.StringHelpers", "GetLength");
+  var lFunc: function(aInstance: ^Void): Integer;
   ^^Void(@lFunc)^ := fLengthDelegate;
   result := lFunc(self.__instance);
 end;
@@ -103,21 +103,21 @@ begin
   exit new MZString withNetInstance(NetStringWithNSString(s));
 end;
 
-class method MZString.NetStringWithNSString(s: NSString): IntPtr;
+class method MZString.NetStringWithNSString(s: NSString): ^Void;
 begin
-  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.StringHelpers', 'FromNSString');
-  var lFunc: function(aNSString: IntPtr): IntPtr;
+  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.StringHelpers", "FromNSString");
+  var lFunc: function(aNSString: ^Void): ^Void;
   ^^Void(@lFunc)^ := lDelegate;
-  result := lFunc(IntPtr(s));
+  result := lFunc(^Void(bridge<CFString>(s)));
 end;
 
-class method MZString.NSStringWithNetString(s: IntPtr): NSString;
+class method MZString.NSStringWithNetString(s: ^Void): NSString;
 begin
   if s = nil then exit nil;
-  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.StringHelpers', 'ToNSString');
-  var lFunc: function(aNetString: IntPtr): IntPtr;
+  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.StringHelpers", "ToNSString");
+  var lFunc: function(aNetString: ^Void): ^Void;
   ^^Void(@lFunc)^ := lDelegate;
-  result := NSString(lFunc(s));
+  result := NSString(bridge<NSString>(lFunc(s)));
 end;
 
 method MZString.get_NSString: NSString;
@@ -127,7 +127,7 @@ end;
 
 { MZArray }
 
-constructor MZArray withNetInstance(aInst: IntPtr) elementType(aType: &Class);
+constructor MZArray withNetInstance(aInst: ^Void) elementType(aType: &Class);
 begin
   self := inherited withNetInstance(aInst);
   fType := aType;
@@ -137,10 +137,10 @@ end;
 constructor MZArray withNSArray(aArray: NSArray);
 begin
   if fFromNSArrayDelegate = nil then
-    fFromNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ArrayHelpers', 'FromNSArray');
-  var lFunc: function(aNSArray: IntPtr): IntPtr;
+    fFromNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ArrayHelpers", "FromNSArray");
+  var lFunc: function(aNSArray: ^Void): ^Void;
   ^^Void(@lFunc)^ := fFromNSArrayDelegate;
-  var lNetArray := lFunc(IntPtr(aArray));
+  var lNetArray := lFunc(^Void(aArray));
   self := inherited withNetInstance(lNetArray);
   fType := typeOf(MZObject); // or infer from array contents
   result := self;
@@ -149,13 +149,13 @@ end;
 constructor MZArray withArray(aArray: array of String);
 begin
   if fFromStringArrayDelegate = nil then
-    fFromStringArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ArrayHelpers', 'FromStringArray');
-  var lFunc: function(aStrings: ^IntPtr; aCount: Integer): IntPtr;
-  var lPtrs := new IntPtr[aArray.Length];
-  for i: Integer := 0 to aArray.Length-1 do
+    fFromStringArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ArrayHelpers", "FromStringArray");
+  var lFunc: function(aStrings: ^^Void; aCount: Integer): ^Void;
+  var lPtrs := new ^Void[aArray.length];
+  for i: Integer := 0 to aArray.length-1 do
     lPtrs[i] := MZString.NetStringWithNSString(aArray[i]);
   ^^Void(@lFunc)^ := fFromStringArrayDelegate;
-  var lNetArray := lFunc(@lPtrs[0], aArray.Length);
+  var lNetArray := lFunc(@lPtrs[0], aArray.length);
   self := inherited withNetInstance(lNetArray);
   fType := typeOf(NSString);
   result := self;
@@ -164,8 +164,8 @@ end;
 method MZArray.objectAtIndex(aIndex: Integer): id;
 begin
   if fGetDelegate = nil then
-    fGetDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ArrayHelpers', 'GetElement');
-  var lFunc: function(aArray: IntPtr; aIndex: Integer): IntPtr;
+    fGetDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ArrayHelpers", "GetElement");
+  var lFunc: function(aArray: ^Void; aIndex: Integer): ^Void;
   ^^Void(@lFunc)^ := fGetDelegate;
   var lItem := lFunc(self.__instance, aIndex);
   if lItem = nil then exit nil;
@@ -183,10 +183,10 @@ end;
 method MZArray.setObject(aObject: NSObject) atIndexedSubscript(aValue: Integer);
 begin
   if fSetDelegate = nil then
-    fSetDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ArrayHelpers', 'SetElement');
-  var lFunc: procedure(aArray: IntPtr; aIndex: Integer; aValue: IntPtr);
+    fSetDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ArrayHelpers", "SetElement");
+  var lFunc: procedure(aArray: ^Void; aIndex: Integer; aValue: ^Void);
   ^^Void(@lFunc)^ := fSetDelegate;
-  var lVal: IntPtr;
+  var lVal: ^Void;
   if fType = typeOf(NSString) then
     lVal := MZString.NetStringWithNSString(NSString(aObject))
   else
@@ -198,8 +198,8 @@ method MZArray.NSArray: NSArray;
 begin
   if fNSArray = nil then begin
     if fToNSArrayDelegate = nil then
-      fToNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ArrayHelpers', 'ToNSArray');
-    var lFunc: function(aArray: IntPtr): IntPtr;
+      fToNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ArrayHelpers", "ToNSArray");
+    var lFunc: function(aArray: ^Void): ^Void;
     ^^Void(@lFunc)^ := fToNSArrayDelegate;
     fNSArray := NSArray(lFunc(self.__instance));
   end;
@@ -214,8 +214,8 @@ end;
 method MZArray.get_count: NSUInteger;
 begin
   if fCountDelegate = nil then
-    fCountDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ArrayHelpers', 'GetCount');
-  var lFunc: function(aArray: IntPtr): Integer;
+    fCountDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ArrayHelpers", "GetCount");
+  var lFunc: function(aArray: ^Void): Integer;
   ^^Void(@lFunc)^ := fCountDelegate;
   result := lFunc(self.__instance);
 end;
@@ -225,10 +225,10 @@ end;
 constructor MZObjectList withNSArray(aNSArray: NSArray);
 begin
   if fFromNSArrayDelegate = nil then
-    fFromNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ListHelpers', 'FromNSArray');
-  var lFunc: function(aNSArray: IntPtr): IntPtr;
+    fFromNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ListHelpers", "FromNSArray");
+  var lFunc: function(aNSArray: ^Void): ^Void;
   ^^Void(@lFunc)^ := fFromNSArrayDelegate;
-  var lNetList := lFunc(IntPtr(aNSArray));
+  var lNetList := lFunc(^Void(aNSArray));
   self := inherited withNetInstance(lNetList);
   fType := typeOf(MZObject);
   result := self;
@@ -237,8 +237,8 @@ end;
 constructor MZObjectList withObject(aObject: id);
 begin
   if fFromObjectDelegate = nil then
-    fFromObjectDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ListHelpers', 'FromObject');
-  var lFunc: function(aObject: IntPtr): IntPtr;
+    fFromObjectDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ListHelpers", "FromObject");
+  var lFunc: function(aObject: ^Void): ^Void;
   ^^Void(@lFunc)^ := fFromObjectDelegate;
   var lNetList := lFunc(MZObject(aObject).__instance);
   self := inherited withNetInstance(lNetList);
@@ -246,7 +246,7 @@ begin
   result := self;
 end;
 
-constructor MZObjectList withNetInstance(aInst: IntPtr) elementType(aType: &Class);
+constructor MZObjectList withNetInstance(aInst: ^Void) elementType(aType: &Class);
 begin
   self := inherited withNetInstance(aInst);
   fType := aType;
@@ -256,8 +256,8 @@ end;
 method MZObjectList.clear;
 begin
   if fClearDelegate = nil then
-    fClearDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ListHelpers', 'Clear');
-  var lFunc: procedure(aList: IntPtr);
+    fClearDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ListHelpers", "Clear");
+  var lFunc: procedure(aList: ^Void);
   ^^Void(@lFunc)^ := fClearDelegate;
   lFunc(self.__instance);
 end;
@@ -265,8 +265,8 @@ end;
 method MZObjectList.objectAtIndex(aIndex: Integer): id;
 begin
   if fGetDelegate = nil then
-    fGetDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ListHelpers', 'GetElement');
-  var lFunc: function(aList: IntPtr; aIndex: Integer): IntPtr;
+    fGetDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ListHelpers", "GetElement");
+  var lFunc: function(aList: ^Void; aIndex: Integer): ^Void;
   ^^Void(@lFunc)^ := fGetDelegate;
   var lItem := lFunc(self.__instance, aIndex);
   if lItem = nil then exit nil;
@@ -289,8 +289,8 @@ end;
 method MZObjectList.get_count: NSUInteger;
 begin
   if fCountDelegate = nil then
-    fCountDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ListHelpers', 'GetCount');
-  var lFunc: function(aList: IntPtr): Integer;
+    fCountDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ListHelpers", "GetCount");
+  var lFunc: function(aList: ^Void): Integer;
   ^^Void(@lFunc)^ := fCountDelegate;
   result := lFunc(self.__instance);
 end;
@@ -299,8 +299,8 @@ method MZObjectList.NSArray: NSArray;
 begin
   if fNSArray = nil then begin
     if fToNSArrayDelegate = nil then
-      fToNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate('MarzipanBridge', 'MarzipanBridge.ListHelpers', 'ToNSArray');
-    var lFunc: function(aList: IntPtr): IntPtr;
+      fToNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ListHelpers", "ToNSArray");
+    var lFunc: function(aList: ^Void): ^Void;
     ^^Void(@lFunc)^ := fToNSArrayDelegate;
     fNSArray := NSArray(lFunc(self.__instance));
   end;
@@ -309,12 +309,12 @@ end;
 
 { NSString_Marzipan_Helpers }
 
-class method NSString_Marzipan_Helpers.stringwithNetString(s: IntPtr): NSString;
+class method NSString_Marzipan_Helpers.stringwithNetString(s: ^Void): NSString;
 begin
   exit MZString.NSStringWithNetString(s);
 end;
 
-method NSString_Marzipan_Helpers.NetString: IntPtr;
+method NSString_Marzipan_Helpers.NetString: ^Void;
 begin
   exit MZString.NetStringWithNSString(self);
 end;
