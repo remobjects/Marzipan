@@ -16,13 +16,18 @@ type
     fVersion: String;
     fObject, fString, fBoolean, fByte, fSByte, fInt16, fUInt16, fInt32, fUInt32, fInt64, fUInt64, fSingle, fDouble, fIntPtr, fUIntPtr, fChar: MZType;
     fHostHandle: ^Void;
-    fDomainId: Integer;
+    // fDomainId: Integer; // Reserved for future hosting APIs that return domain/app context IDs.
+    fRuntimeRoot: NSString;
+    fRuntimeConfigPath: NSString;
+    fBridgeAssemblyPath: NSString;
+    fHostFxrHandle: ^Void;
+    fLoadAssemblyAndGetFunctionPointer: ^Void;
 
     fTypes: NSMutableDictionary := new NSMutableDictionary;
     fAssemblies: NSMutableDictionary := new NSMutableDictionary;
-    fAssemblyNames: NSMutableDictionary := new NSMutableDictionary;
+    // fAssemblyNames: NSMutableDictionary := new NSMutableDictionary; // Reserved for assembly name lookup cache.
 
-    method initializeCoreCLR(aDomain, aAppName, aVersion, aLibPath, aEtcPath: NSString);
+    method initializeCoreCLR(aDomain, aAppName, aVersion, aRuntimeRoot, aRuntimeConfigPath, aBridgeAssemblyPath: NSString);
     method runMain;
 
   assembly
@@ -33,12 +38,16 @@ type
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString);
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString);
     constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString) lib(aLibPath: NSString) etc(aETCPath: NSString);
+    constructor withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString) runtimeRoot(aRuntimeRoot: NSString) runtimeConfig(aRuntimeConfigPath: NSString) bridge(aBridgeAssemblyPath: NSString);
 
     class property sharedInstance: MZCoreRuntime read get_sharedInstance;
 
     property version: String read fVersion;
     property hostHandle: ^Void read fHostHandle;
-    property domainId: Integer read fDomainId;
+    // property domainId: Integer read fDomainId; // Reserved for future hosting APIs.
+    property runtimeRoot: NSString read fRuntimeRoot;
+    property runtimeConfigPath: NSString read fRuntimeConfigPath;
+    property bridgeAssemblyPath: NSString read fBridgeAssemblyPath;
 
     method loadAssembly(aPath: NSString): MZCoreAssembly;
     method getType(aFullName: NSString): MZType;
@@ -112,6 +121,7 @@ type
   MZObject = public class
   protected
     fInstance: ^Void;
+    class var fFreeHandleDelegate: ^Void;
     class var fEqualsDelegate: ^Void;
     method setInstance(aInstance: ^Void);
   public
@@ -126,11 +136,144 @@ type
     finalizer;
   end;
 
+  hostfxr_delegate_type = public enum
+  (
+    hdt_com_activation = 0,
+    hdt_load_in_memory_assembly = 1,
+    hdt_winrt_activation = 2,
+    hdt_com_register = 3,
+    hdt_com_unregister = 4,
+    hdt_load_assembly_and_get_function_pointer = 5,
+    hdt_get_function_pointer = 6
+    ) of Integer;
+
+  hostfxr_initialize_parameters = public record
+    // Fields are required by hostfxr ABI even if not read directly in managed code.
+    size: NativeUInt;
+    host_path: ^AnsiChar;
+    dotnet_root: ^AnsiChar;
+  end;
+
+  get_hostfxr_parameters = public record
+    // Fields are required by nethost ABI even if not read directly in managed code.
+    size: NativeUInt;
+    assembly_path: ^AnsiChar;
+    dotnet_root: ^AnsiChar;
+  end;
+
 implementation
+
+type
+  hostfxr_handle = ^Void;
+
+
+
+  hostfxr_initialize_for_runtime_config_fn = function(runtime_config_path: ^AnsiChar; parameters: ^hostfxr_initialize_parameters; out handle: hostfxr_handle): Integer; cdecl;
+  hostfxr_get_runtime_delegate_fn = function(handle: hostfxr_handle; delegate_type: hostfxr_delegate_type; out delegate: ^Void): Integer; cdecl;
+  hostfxr_close_fn = function(handle: hostfxr_handle): Integer; cdecl;
+
+  get_hostfxr_path_fn = function(buffer: ^AnsiChar; buffer_size: ^NativeUInt; parameters: ^get_hostfxr_parameters): Integer; cdecl;
+
+  load_assembly_and_get_function_pointer_fn = function(assembly_path: ^AnsiChar; type_name: ^AnsiChar; method_name: ^AnsiChar; delegate_type_name: ^AnsiChar; reserved: ^Void; out delegate: ^Void): Integer; cdecl;
+
+const
+  RTLD_NOW = 2;
+
+[System.Runtime.InteropServices.DllImport('/usr/lib/libSystem.B.dylib')]
+method dlopen(path: ^AnsiChar; mode: Integer): ^Void; external;
+
+[System.Runtime.InteropServices.DllImport('/usr/lib/libSystem.B.dylib')]
+method dlsym(handle: ^Void; symbol: ^AnsiChar): ^Void; external;
+
+method fileExists(aPath: NSString): Boolean;
+begin
+  if (aPath = nil) or (aPath.length = 0) then exit false;
+  exit NSFileManager.defaultManager.fileExistsAtPath(aPath);
+end;
+
+method tryGetHostFxrPathFromNethost(aRuntimeRoot: NSString): NSString;
+begin
+  // We try nethost first if the app ships it. If missing, we fall back to scanning host/fxr.
+  // This keeps us version-agnostic and avoids hardcoding a specific runtime version.
+  if (aRuntimeRoot = nil) or (aRuntimeRoot.length = 0) then exit nil;
+
+  var lCandidates := new NSMutableArray;
+  lCandidates.addObject(aRuntimeRoot.stringByAppendingPathComponent('libnethost.dylib'));
+
+  var lFxrRoot := aRuntimeRoot.stringByAppendingPathComponent('host').stringByAppendingPathComponent('fxr');
+  if fileExists(lFxrRoot) then begin
+    var lDirs := NSFileManager.defaultManager.contentsOfDirectoryAtPath(lFxrRoot) error(nil);
+    if lDirs <> nil then begin
+      for each lDir in lDirs do
+        lCandidates.addObject(lFxrRoot.stringByAppendingPathComponent(String(lDir)).stringByAppendingPathComponent('libnethost.dylib'));
+    end;
+  end;
+
+  for each lPath in lCandidates do begin
+    if not fileExists(NSString(lPath)) then continue;
+    var lHandle := dlopen(NSString(lPath).UTF8String, RTLD_NOW);
+    if lHandle = nil then continue;
+    var lSym := dlsym(lHandle, 'get_hostfxr_path');
+    if lSym = nil then continue;
+
+    var lGetPath: get_hostfxr_path_fn;
+    ^^Void(@lGetPath)^ := lSym;
+
+    var lBufferSize: NativeUInt := 1024;
+    var lBuffer := new AnsiChar[lBufferSize];
+    var lParams: get_hostfxr_parameters;
+    lParams.size := sizeOf(get_hostfxr_parameters);
+    lParams.assembly_path := nil;
+    lParams.dotnet_root := aRuntimeRoot.UTF8String;
+
+    var lRes := lGetPath(@lBuffer[0], @lBufferSize, @lParams);
+    if lRes = 0 then begin
+      exit NSString.stringWithUTF8String(@lBuffer[0]);
+    end;
+  end;
+  exit nil;
+end;
+
+method findHostFxrPathByScanning(aRuntimeRoot: NSString): NSString;
+begin
+  // Fallback: scan host/fxr and pick the numerically highest version folder.
+  // This preserves forward-compatibility when the app bundles newer runtimes.
+  if (aRuntimeRoot = nil) or (aRuntimeRoot.length = 0) then exit nil;
+  var lFxrRoot := aRuntimeRoot.stringByAppendingPathComponent('host').stringByAppendingPathComponent('fxr');
+  if not fileExists(lFxrRoot) then exit nil;
+
+  var lDirs := NSFileManager.defaultManager.contentsOfDirectoryAtPath(lFxrRoot) error(nil);
+  if (lDirs = nil) or (lDirs.count = 0) then exit nil;
+
+  var lSorted := lDirs.sortedArrayUsingComparator((a, b) -> begin
+    exit String(b).compare(String(a)) options(NSStringCompareOptions.NSNumericSearch);
+  end);
+  var lLatest := NSString(lSorted[0]);
+  var lPath := lFxrRoot.stringByAppendingPathComponent(lLatest).stringByAppendingPathComponent('libhostfxr.dylib');
+  if fileExists(lPath) then exit lPath;
+  exit nil;
+end;
+
+method loadHostFxr(aRuntimeRoot: NSString): ^Void;
+begin
+  // Attempt nethost resolution first; if not present, fall back to a direct scan.
+  var lHostFxrPath := tryGetHostFxrPathFromNethost(aRuntimeRoot);
+  if lHostFxrPath = nil then
+    lHostFxrPath := findHostFxrPathByScanning(aRuntimeRoot);
+
+  if lHostFxrPath = nil then
+    raise new MZException withName("CoreCLR") reason("Could not locate libhostfxr.dylib. Ensure runtimeRoot points to a valid dotnet runtime.") userInfo(nil);
+
+  var lHandle := dlopen(lHostFxrPath.UTF8String, RTLD_NOW);
+  if lHandle = nil then
+    raise new MZException withName("CoreCLR") reason(NSString.stringWithFormat("Failed to load hostfxr: %@", lHostFxrPath)) userInfo(nil);
+
+  exit lHandle;
+end;
 
 constructor MZCoreRuntime withDomain(aDomain: NSString) appName(aAppName: NSString);
 begin
-  constructor withDomain(aDomain) appName(aAppName) version("v6.0.0");
+  constructor withDomain(aDomain) appName(aAppName) version("v8.0.0");
 end;
 
 constructor MZCoreRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString);
@@ -140,18 +283,71 @@ end;
 
 constructor MZCoreRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString) lib(aLibPath: NSString) etc(aETCPath: NSString);
 begin
+  constructor withDomain(aDomain) appName(aAppName) version(aVersion) runtimeRoot(aLibPath) runtimeConfig(aETCPath) bridge(nil);
+end;
+
+constructor MZCoreRuntime withDomain(aDomain: NSString) appName(aAppName: NSString) version(aVersion: NSString) runtimeRoot(aRuntimeRoot: NSString) runtimeConfig(aRuntimeConfigPath: NSString) bridge(aBridgeAssemblyPath: NSString);
+begin
   if fInstance <> nil then raise new MZException withName("OnlyOneCoreCLR") reason("Only one runtime per class") userInfo(nil);
   fVersion := aVersion;
   fInstance := self;
-  initializeCoreCLR(aDomain, aAppName, aVersion, aLibPath, aETCPath);
+  initializeCoreCLR(aDomain, aAppName, aVersion, aRuntimeRoot, aRuntimeConfigPath, aBridgeAssemblyPath);
   runMain();
 end;
 
-method MZCoreRuntime.initializeCoreCLR(aDomain, aAppName, aVersion, aLibPath, aEtcPath: NSString);
+method MZCoreRuntime.initializeCoreCLR(aDomain, aAppName, aVersion, aRuntimeRoot, aRuntimeConfigPath, aBridgeAssemblyPath: NSString);
 begin
-  // Use coreclr_initialize or hostfxr_initialize_for_runtime_config
-  // Store fHostHandle and fDomainId
-  // (Implementation depends on your CoreCLR hosting setup)
+  // Fail fast: the library is runtime-agnostic, so the host must provide explicit paths.
+  if (aRuntimeRoot = nil) or (aRuntimeRoot.length = 0) then
+    raise new MZException withName("CoreCLR") reason("runtimeRoot is required.") userInfo(nil);
+  if (aRuntimeConfigPath = nil) or (aRuntimeConfigPath.length = 0) then
+    raise new MZException withName("CoreCLR") reason("runtimeConfigPath is required.") userInfo(nil);
+  if (aBridgeAssemblyPath = nil) or (aBridgeAssemblyPath.length = 0) then
+    raise new MZException withName("CoreCLR") reason("bridgeAssemblyPath is required.") userInfo(nil);
+  if not fileExists(aRuntimeConfigPath) then
+    raise new MZException withName("CoreCLR") reason(NSString.stringWithFormat("runtimeConfigPath not found: %@", aRuntimeConfigPath)) userInfo(nil);
+  if not fileExists(aBridgeAssemblyPath) then
+    raise new MZException withName("CoreCLR") reason(NSString.stringWithFormat("bridgeAssemblyPath not found: %@", aBridgeAssemblyPath)) userInfo(nil);
+
+  fRuntimeRoot := aRuntimeRoot;
+  fRuntimeConfigPath := aRuntimeConfigPath;
+  fBridgeAssemblyPath := aBridgeAssemblyPath;
+
+  // Load hostfxr and get required entry points.
+  fHostFxrHandle := loadHostFxr(aRuntimeRoot);
+  var lInitSym := dlsym(fHostFxrHandle, 'hostfxr_initialize_for_runtime_config');
+  var lGetDelSym := dlsym(fHostFxrHandle, 'hostfxr_get_runtime_delegate');
+  var lCloseSym := dlsym(fHostFxrHandle, 'hostfxr_close');
+  if (lInitSym = nil) or (lGetDelSym = nil) or (lCloseSym = nil) then
+    raise new MZException withName("CoreCLR") reason("hostfxr symbols not found. Ensure the runtimeRoot is valid.") userInfo(nil);
+
+  var lInit: hostfxr_initialize_for_runtime_config_fn;
+  var lGetDel: hostfxr_get_runtime_delegate_fn;
+  var lClose: hostfxr_close_fn;
+  ^^Void(@lInit)^ := lInitSym;
+  ^^Void(@lGetDel)^ := lGetDelSym;
+  ^^Void(@lClose)^ := lCloseSym;
+
+  var lParams: hostfxr_initialize_parameters;
+  lParams.size := sizeOf(hostfxr_initialize_parameters);
+  lParams.host_path := nil;
+  lParams.dotnet_root := aRuntimeRoot.UTF8String;
+
+  var lHandle: hostfxr_handle := nil;
+  var lRes := lInit(aRuntimeConfigPath.UTF8String, @lParams, out lHandle);
+  if lRes <> 0 then
+    raise new MZException withName("CoreCLR") reason(NSString.stringWithFormat("hostfxr_initialize_for_runtime_config failed: %d", lRes)) userInfo(nil);
+
+  fHostHandle := lHandle;
+
+  // Request the load_assembly_and_get_function_pointer delegate.
+  var lDelegate: ^Void := nil;
+  lRes := lGetDel(lHandle, hostfxr_delegate_type.hdt_load_assembly_and_get_function_pointer, out lDelegate);
+  if (lRes <> 0) or (lDelegate = nil) then
+    raise new MZException withName("CoreCLR") reason("Failed to get load_assembly_and_get_function_pointer delegate.") userInfo(nil);
+
+  fLoadAssemblyAndGetFunctionPointer := lDelegate;
+  lClose(lHandle);
 end;
 
 class method MZCoreRuntime.get_sharedInstance: MZCoreRuntime;
@@ -163,8 +359,23 @@ end;
 
 method MZCoreRuntime.createDelegate(aAssemblyName, aTypeName, aMethodName: String): ^Void;
 begin
-  // Use coreclr_create_delegate or hostfxr equivalent
-  // (Implementation depends on your CoreCLR hosting setup)
+  if fLoadAssemblyAndGetFunctionPointer = nil then
+    raise new MZException withName("CoreCLR") reason("Runtime not initialized.") userInfo(nil);
+
+  // load_assembly_and_get_function_pointer expects an assembly path. We default to the bridge path,
+  // but allow callers to pass a fully qualified path in aAssemblyName when needed.
+  var lAssemblyPath: NSString := fBridgeAssemblyPath;
+  if (aAssemblyName <> nil) and (aAssemblyName.rangeOfString('/').location <> NSNotFound) then
+    lAssemblyPath := aAssemblyName;
+
+  var lFunc: load_assembly_and_get_function_pointer_fn;
+  ^^Void(@lFunc)^ := fLoadAssemblyAndGetFunctionPointer;
+
+  var lOut: ^Void := nil;
+  var lRes := lFunc(lAssemblyPath.UTF8String, aTypeName.UTF8String, aMethodName.UTF8String, nil, nil, out lOut);
+  if (lRes <> 0) or (lOut = nil) then
+    raise new MZException withName("CoreCLR") reason(NSString.stringWithFormat("Failed to create delegate: %@.%@ (%d)", aTypeName, aMethodName, lRes)) userInfo(nil);
+  exit lOut;
 end;
 
 method MZCoreRuntime.loadAssembly(aPath: NSString): MZCoreAssembly;
@@ -308,7 +519,7 @@ end;
 
 finalizer MZCoreRuntime;
 begin
-  // coreclr_shutdown if needed
+  // hostfxr does not provide an explicit shutdown path for all scenarios; keep a no-op here.
 end;
 
 // --- MZType ---
@@ -346,18 +557,32 @@ end;
 
 constructor MZObject withNetInstance(aInstance: ^Void);
 begin
-  if assigned(aInstance) then
+  if not assigned(aInstance) then
     exit nil;
   setInstance(aInstance);
 end;
 
 finalizer MZObject;
 begin
-  // Release GCHandle or reference if needed
+  if fInstance <> nil then begin
+    if fFreeHandleDelegate = nil then
+      fFreeHandleDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "FreeHandle");
+    var lFree: procedure(aHandle: ^Void);
+    ^^Void(@lFree)^ := fFreeHandleDelegate;
+    lFree(fInstance);
+    fInstance := nil;
+  end;
 end;
 
 method MZObject.setInstance(aInstance: ^Void);
 begin
+  if fInstance <> nil then begin
+    if fFreeHandleDelegate = nil then
+      fFreeHandleDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "FreeHandle");
+    var lFree: procedure(aHandle: ^Void);
+    ^^Void(@lFree)^ := fFreeHandleDelegate;
+    lFree(fInstance);
+  end;
   fInstance := aInstance;
 end;
 
@@ -369,7 +594,7 @@ end;
 method MZObject.&equals(aOther: MZObject): Boolean;
 begin
   if fEqualsDelegate = nil then
-    fEqualsDelegate := MZCoreRuntime.sharedInstance.createDelegate("MarzipanBridge", "MarzipanBridge.ObjectHelpers", "Equals");
+    fEqualsDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "Equals");
   var lFunc: function(aInstance: ^Void; aOther: ^Void): Boolean;
   ^^Void(@lFunc)^ := fEqualsDelegate;
   exit lFunc(self.__instance, if aOther = nil then nil else aOther.__instance);

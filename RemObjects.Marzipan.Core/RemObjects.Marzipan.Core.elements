@@ -25,7 +25,9 @@
     <Reference Include="Foundation" />
     <Reference Include="rtl" />
     <Reference Include="libToffee" />
-    <Reference Include="libElements" />
+    <Reference Include="libElements">
+      <HintPath>..\..\RTL2\Bin\Toffee\macOS\libElements.fx</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Library.pas" />
