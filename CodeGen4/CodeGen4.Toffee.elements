@@ -12,7 +12,7 @@
     <AllowUnsafeCode>False</AllowUnsafeCode>
     <CrossPlatform>True</CrossPlatform>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-    <SDK>OS X</SDK>
+    <SDK>macOS</SDK>
     <CreateHeaderFile>True</CreateHeaderFile>
     <Name>CodegGen4 (Cocoa)</Name>
     <Platform Condition="'$(Platform)' == ''">AnyCPU</Platform>
