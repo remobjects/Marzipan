@@ -11,7 +11,7 @@
     <AllowLegacyCreate>False</AllowLegacyCreate>
     <AllowUnsafeCode>False</AllowUnsafeCode>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
-    <SDK>OS X</SDK>
+    <SDK>macOS</SDK>
     <CreateHeaderFile>True</CreateHeaderFile>
     <BundleIdentifier>com.remObjects.marzipan</BundleIdentifier>
   </PropertyGroup>
@@ -38,10 +38,13 @@
     <Reference Include="CoreGraphics" />
     <Reference Include="Foundation" />
     <Reference Include="libmono-2.0">
-      <HintPath>libmono-2.0\OS X\libmono-2.0.fx</HintPath>
+      <HintPath>..\..\Fire\Subtrees\Marzipan\bin\Debug\macOS\libMono-2.0.fx</HintPath>
     </Reference>
     <Reference Include="rtl" />
     <Reference Include="libToffee" />
+    <Reference Include="libElements">
+      <HintPath>..\..\RTL2\Bin\Toffee\macOS\libElements.fx</HintPath>
+    </Reference>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Library.pas" />

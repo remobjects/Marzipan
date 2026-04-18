@@ -108,7 +108,7 @@ end;
 class method MZString.stringWithNSString(s: NSString): MZString;
 begin
   if s = nil then exit nil;
-  exit new MZString withMonoInstance(^MonoObject(mono_string_from_utf16(^mono_unichar2(s.cStringUsingEncoding(NSStringEncoding.NSUnicodeStringEncoding)))));
+  exit new MZString withMonoInstance(^MonoObject(mono_string_from_utf16(^mono_unichar2(s.cStringUsingEncoding(NSStringEncoding.UnicodeStringEncoding)))));
 end;
 
 method MZString.get_NSString: NSString;
@@ -125,7 +125,7 @@ end;
 class method MZString.MonoStringWithNSString(s: NSString): ^MonoString;
 begin
   if s = nil then exit nil;
-  exit mono_string_new_wrapper(s.cStringUsingEncoding(NSStringEncoding.NSUTF8StringEncoding));
+  exit mono_string_new_wrapper(s.cStringUsingEncoding(NSStringEncoding.UTF8StringEncoding));
 end;
 
 class method NSString_Marzipan_Helpers.stringwithMonoString(s: ^MonoString): NSString;
@@ -137,7 +137,7 @@ end;
 method NSString_Marzipan_Helpers.MonoString: ^MonoString;
 begin
   if self = nil then exit nil;
-  exit mono_string_from_utf16(^mono_unichar2(self.cStringUsingEncoding(NSStringEncoding.NSUnicodeStringEncoding)));
+  exit mono_string_from_utf16(^mono_unichar2(self.cStringUsingEncoding(NSStringEncoding.UnicodeStringEncoding)));
 end;
 
 { MZArray }
