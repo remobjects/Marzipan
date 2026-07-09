@@ -9,6 +9,8 @@ Project("{656346d9-4656-40da-a068-22d5425d4639}") = "Importer", "Importer\Import
 EndProject
 Project("{656346d9-4656-40da-a068-22d5425d4639}") = "LibMono (Import)", "LibMono (Import).elements", "{ba07e348-1d49-454f-ae2d-ab6ab8821206}"
 EndProject
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "RemObjects.Marzipan.Bridge (.NET)", "RemObjects.Marzipan.Bridge\RemObjects.Marzipan.Bridge.elements", "{a24e0d83-49b2-4e0b-a7c4-1a1f8a2b6a50}"
+EndProject
 Project("{656346d9-4656-40da-a068-22d5425d4639}") = "RemObjects.Marzipan.Core", "RemObjects.Marzipan.Core\RemObjects.Marzipan.Core.elements", "{fdd173fc-78f5-4dfe-853e-8a9e092687f1}"
 EndProject
 Project("{656346d9-4656-40da-a068-22d5425d4639}") = "RemObjects.Marzipan.Mono", "RemObjects.Marzipan.Mono\RemObjects.Marzipan.Mono.elements", "{b8a8b4bb-61d3-49b0-bafe-99016e5b3225}"
@@ -31,6 +33,10 @@ Global
 		{ba07e348-1d49-454f-ae2d-ab6ab8821206}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
 		{ba07e348-1d49-454f-ae2d-ab6ab8821206}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
 		{ba07e348-1d49-454f-ae2d-ab6ab8821206}.Release|AnyCPU.Build.0 = Release|AnyCPU
+		{a24e0d83-49b2-4e0b-a7c4-1a1f8a2b6a50}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{a24e0d83-49b2-4e0b-a7c4-1a1f8a2b6a50}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{a24e0d83-49b2-4e0b-a7c4-1a1f8a2b6a50}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{a24e0d83-49b2-4e0b-a7c4-1a1f8a2b6a50}.Release|AnyCPU.Build.0 = Release|AnyCPU
 		{fdd173fc-78f5-4dfe-853e-8a9e092687f1}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
 		{fdd173fc-78f5-4dfe-853e-8a9e092687f1}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
 		{fdd173fc-78f5-4dfe-853e-8a9e092687f1}.Release|AnyCPU.ActiveCfg = Release|AnyCPU

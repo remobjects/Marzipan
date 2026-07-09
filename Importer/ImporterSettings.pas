@@ -11,6 +11,7 @@ uses
 
 type
   OutputType = public enum (Nougat, ObjC);
+  RuntimeBackend = public enum (Mono, Core);
   ImporterSettings = public class
   private
     fLibraries : List<String> := new List<String>;
@@ -21,6 +22,7 @@ type
     property Types: List<ImportType> read fTypes;
     property &Namespace: String;
     property OutputType: OutputType;
+    property Runtime: RuntimeBackend := RuntimeBackend.Mono;
     property OutputFilename: String;
     property Prefix: String;
 
@@ -48,6 +50,9 @@ begin
   &Namespace := aDoc.Root.Element('namespace'):Value;
   if aDoc.Root.Element('outputtype'):Value:ToLowerInvariant = 'objc' then
     OutputType := OutputType.ObjC;
+  var lRuntime := aDoc.Root.Element('runtime');
+  if (lRuntime <> nil) and (lRuntime:Value:ToLowerInvariant = 'core') then
+    Runtime := RuntimeBackend.Core;
   OutputFilename := aDoc.Root.Element('outputfilename'):Value:Replace("\", Path.DirectorySeparatorChar);
   Prefix := aDoc.Root.Element('prefix'):Value;
   case OutputType of

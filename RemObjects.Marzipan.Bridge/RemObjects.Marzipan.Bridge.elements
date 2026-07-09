@@ -39,10 +39,11 @@
     <Reference Include="System" />
     <Reference Include="System.Runtime" />
     <Reference Include="System.Runtime.InteropServices" />
+    <Reference Include="System.Runtime.Loader" />
     <Reference Include="System.Collections" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Bridge.pas" />
+    <Compile Include="Bridge.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Echoes.targets" />
 </Project>

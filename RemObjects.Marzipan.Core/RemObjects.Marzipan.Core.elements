@@ -4,12 +4,12 @@
     <RootNamespace>RemObjects.Marzipan.Core</RootNamespace>
     <ProjectGuid>{FDD173FC-78F5-4DFE-853E-8A9E092687F1}</ProjectGuid>
     <OutputType>StaticLibrary</OutputType>
-    <AssemblyName>RemObjects.Marzipan.Core</AssemblyName>
     <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
     <SDK>macOS</SDK>
     <MangleTypeNames>True</MangleTypeNames>
     <CreateHeaderFile>True</CreateHeaderFile>
     <DefaultUses>RemObjects.Elements.RTL</DefaultUses>
+    <BinaryName>MarzipanCore</BinaryName>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <Optimize>False</Optimize>

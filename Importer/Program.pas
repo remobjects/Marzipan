@@ -19,7 +19,7 @@ implementation
 
 method ConsoleApp.WriteSyntax;
 begin
-  writeLn('syntax: MZImporter.exe importsettings.xml langauge');
+  writeLn('syntax: MZImporter.exe importsettings.xml langauge [mono|core]');
   writeLn();
   writeLn('  where');
   writeLn();
@@ -42,7 +42,7 @@ begin
   writeLn("Built with CodeGen4");
   writeLn();
 
-  if length(args) <> 2 then begin
+  if (length(args) < 2) or (length(args) > 3) then begin
     WriteSyntax;
     exit;
   end;
@@ -70,6 +70,16 @@ begin
 
   var x := new ImporterSettings;
   x.LoadFromXml(lSettingsFile);
+  if length(args) = 3 then begin
+    case args[2]:ToLowerInvariant of
+      'mono': x.Runtime := RuntimeBackend.Mono;
+      'core': x.Runtime := RuntimeBackend.Core;
+      else begin
+        WriteSyntax;
+        exit;
+      end;
+    end;
+  end;
   Environment.CurrentDirectory := Path.GetDirectoryName(args[0]);
 
   var lWorker := new Importer(x, lCodeGenerator);

@@ -36,7 +36,7 @@ type
     method get_NSString: NSString;
     class var fLengthDelegate, fGetCharsDelegate, fReleaseCharsDelegate, fFromUtf16Delegate: ^Void;
     class var fPinnedKey: IntPtr;
-    class var fType: MZType := MZCoreRuntime.sharedInstance.getCoreType("System.String");
+    class var fType: MZType;
   public
     class method getType: MZType; override;
     class method stringWithNSString(s: NSString): MZString;
@@ -127,6 +127,13 @@ end;
 
 class method MZString.getType: MZType;
 begin
+  // Do not resolve this in the class initializer.  Cocoa/Toffee can touch the
+  // MZString class while the host app is still parsing paths and before the
+  // CoreCLR host has been initialized.  Lazy lookup keeps bootstrapping order
+  // explicit: create MZCoreRuntime first, then ask managed string helpers for
+  // their managed type.
+  if fType = nil then
+    fType := MZCoreRuntime.sharedInstance.getCoreType("System.String");
   exit fType;
 end;
 

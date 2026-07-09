@@ -4,7 +4,6 @@
     <RootNamespace>RemObjects.Marzipan</RootNamespace>
     <ProjectGuid>{B8A8B4BB-61D3-49B0-BAFE-99016E5B3225}</ProjectGuid>
     <OutputType>StaticLibrary</OutputType>
-    <AssemblyName>Marzipan</AssemblyName>
     <AllowGlobals>True</AllowGlobals>
     <AllowLegacyWith>False</AllowLegacyWith>
     <AllowLegacyOutParams>False</AllowLegacyOutParams>
@@ -14,6 +13,7 @@
     <SDK>macOS</SDK>
     <CreateHeaderFile>True</CreateHeaderFile>
     <BundleIdentifier>com.remObjects.marzipan</BundleIdentifier>
+    <BinaryName>MarzipanMono</BinaryName>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <Optimize>false</Optimize>

@@ -103,9 +103,55 @@ type
     property typeName: NSString read fTypeName;
     property &assembly: NSString read fAssembly;
 
-    method getMethod(aSig: NSString): ^Void;
+    method getMethod(aSig: NSString): MZMethod;
     method getMethodThunk(aSig: NSString): ^Void;
     method instantiate: ^Void;
+  end;
+
+  MZMethod = public class
+  private
+    fHandle: ^Void;
+  public
+    constructor withHandle(aHandle: ^Void);
+    property handle: ^Void read fHandle;
+    finalizer;
+  end;
+
+  MZCallFrame = public class
+  private
+    fHandle: ^Void;
+    class var fCreateDelegate, fFreeDelegate, fInvokeDelegate: ^Void;
+    class var fSetObjectDelegate, fSetStringDelegate, fSetBooleanDelegate, fSetI4Delegate, fSetU4Delegate, fSetI8Delegate, fSetU8Delegate, fSetR4Delegate, fSetR8Delegate, fSetIntPtrDelegate, fSetDateTimeDelegate: ^Void;
+    class var fGetObjectDelegate, fGetStringDelegate, fGetBooleanDelegate, fGetI4Delegate, fGetU4Delegate, fGetI8Delegate, fGetU8Delegate, fGetR4Delegate, fGetR8Delegate, fGetIntPtrDelegate, fGetDateTimeDelegate: ^Void;
+  public
+    constructor withMethod(aMethod: MZMethod) target(aTarget: ^Void) argumentCount(aArgumentCount: Integer);
+    property handle: ^Void read fHandle;
+
+    method setObject(aIndex: Integer) value(aValue: ^Void);
+    method setString(aIndex: Integer) value(aValue: ^Void);
+    method setBoolean(aIndex: Integer) value(aValue: Boolean);
+    method setInt32(aIndex: Integer) value(aValue: Int32);
+    method setUInt32(aIndex: Integer) value(aValue: UInt32);
+    method setInt64(aIndex: Integer) value(aValue: Int64);
+    method setUInt64(aIndex: Integer) value(aValue: UInt64);
+    method setSingle(aIndex: Integer) value(aValue: Single);
+    method setDouble(aIndex: Integer) value(aValue: Double);
+    method setIntPtr(aIndex: Integer) value(aValue: intptr_t);
+    method setDateTime(aIndex: Integer) value(aValue: MZDateTime);
+
+    method invoke: ^Void;
+    method getObjectResult: ^Void;
+    method getStringResult: ^Void;
+    method getBooleanResult: Boolean;
+    method getInt32Result: Int32;
+    method getUInt32Result: UInt32;
+    method getInt64Result: Int64;
+    method getUInt64Result: UInt64;
+    method getSingleResult: Single;
+    method getDoubleResult: Double;
+    method getIntPtrResult: intptr_t;
+    method getDateTimeResult: MZDateTime;
+    finalizer;
   end;
 
   MZCoreAssembly = public class
@@ -122,10 +168,11 @@ type
   protected
     fInstance: ^Void;
     class var fFreeHandleDelegate: ^Void;
-    class var fEqualsDelegate: ^Void;
+    class var fEqualsDelegate, fDescriptionDelegate, fExceptionStringDelegate: ^Void;
     method setInstance(aInstance: ^Void);
   public
     class method raiseException(aEx: ^Void);
+    class method freeHandle(aHandle: ^Void);
     constructor withNetInstance(aInstance: ^Void);
     property __instance: ^Void read fInstance write setInstance;
     class method getTypeCode: MZTypeCode; virtual;
@@ -367,12 +414,25 @@ begin
   var lAssemblyPath: NSString := fBridgeAssemblyPath;
   if (aAssemblyName <> nil) and (aAssemblyName.rangeOfString('/').location <> NSNotFound) then
     lAssemblyPath := aAssemblyName;
+  var lAssemblySimpleName := if (aAssemblyName <> nil) and (aAssemblyName.rangeOfString('/').location = NSNotFound) then
+                               NSString(aAssemblyName)
+                             else
+                               lAssemblyPath.lastPathComponent.stringByDeletingPathExtension;
+  var lTypeName := if (aTypeName <> nil) and (aTypeName.rangeOfString(',').location <> NSNotFound) then
+                     NSString(aTypeName)
+                   else
+                     NSString.stringWithFormat("%@, %@", aTypeName, lAssemblySimpleName);
 
   var lFunc: load_assembly_and_get_function_pointer_fn;
   ^^Void(@lFunc)^ := fLoadAssemblyAndGetFunctionPointer;
 
+  // Bridge entry points are exported with [UnmanagedCallersOnly].  For those,
+  // hostfxr requires the magic UNMANAGEDCALLERSONLY_METHOD sentinel instead of
+  // a managed delegate type name.  Passing nil here asks hostfxr to synthesize a
+  // managed delegate and .NET rejects the request with E_INVALIDARG.
+  var lUnmanagedCallersOnly := ^AnsiChar(intptr_t(-1));
   var lOut: ^Void := nil;
-  var lRes := lFunc(lAssemblyPath.UTF8String, aTypeName.UTF8String, aMethodName.UTF8String, nil, nil, out lOut);
+  var lRes := lFunc(lAssemblyPath.UTF8String, lTypeName.UTF8String, aMethodName.UTF8String, lUnmanagedCallersOnly, nil, out lOut);
   if (lRes <> 0) or (lOut = nil) then
     raise new MZException withName("CoreCLR") reason(NSString.stringWithFormat("Failed to create delegate: %@.%@ (%d)", aTypeName, aMethodName, lRes)) userInfo(nil);
   exit lOut;
@@ -383,7 +443,18 @@ begin
   locking self do begin
     result := fAssemblies.objectForKey(aPath);
     if assigned(result) then exit;
-    // In CoreCLR, assemblies are loaded via managed code
+    var lDelegate := createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.RuntimeHelpers", "LoadAssemblyHandle");
+    var lFunc: function(aPath: ^Void): ^Void;
+    ^^Void(@lFunc)^ := lDelegate;
+    var lPathHandle := MZString.NetStringWithNSString(aPath);
+    try
+      var lException := lFunc(lPathHandle);
+      if lException <> nil then
+        MZObject.raiseException(lException);
+    finally
+      MZObject.freeHandle(lPathHandle);
+    end;
+
     result := new MZCoreAssembly withNameAndPath(aPath.lastPathComponent, aPath);
     fAssemblies.setObject(result) forKey(aPath);
   end;
@@ -530,19 +601,269 @@ begin
   fAssembly := aAssembly;
 end;
 
-method MZType.getMethod(aSig: NSString): ^Void;
+method MZType.getMethod(aSig: NSString): MZMethod;
 begin
-  // Use managed bridge to resolve method
+  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.TypeHelpers", "GetMethodHandle");
+  var lFunc: function(aAssembly: ^Void; aTypeName: ^Void; aSignature: ^Void): ^Void;
+  ^^Void(@lFunc)^ := lDelegate;
+
+  var lAssembly := MZString.NetStringWithNSString(fAssembly);
+  var lTypeName := MZString.NetStringWithNSString(fTypeName);
+  var lSignature := MZString.NetStringWithNSString(aSig);
+  try
+    var lHandle := lFunc(lAssembly, lTypeName, lSignature);
+    if lHandle = nil then
+      raise new MZException withName("UnknownMethod") reason(NSString.stringWithFormat('Unknown Method "%@".', aSig)) userInfo(nil);
+    result := new MZMethod withHandle(lHandle);
+  finally
+    MZObject.freeHandle(lAssembly);
+    MZObject.freeHandle(lTypeName);
+    MZObject.freeHandle(lSignature);
+  end;
 end;
 
 method MZType.getMethodThunk(aSig: NSString): ^Void;
 begin
-  // Use managed bridge to get unmanaged thunk
+  // Mono exposes unmanaged thunks. Core uses a managed reflection call-frame instead.
+  exit getMethod(aSig).handle;
 end;
 
 method MZType.instantiate: ^Void;
 begin
-  // Use managed bridge to instantiate object
+  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.TypeHelpers", "InstantiateHandle");
+  var lFunc: function(aAssembly: ^Void; aTypeName: ^Void): ^Void;
+  ^^Void(@lFunc)^ := lDelegate;
+
+  var lAssembly := MZString.NetStringWithNSString(fAssembly);
+  var lTypeName := MZString.NetStringWithNSString(fTypeName);
+  try
+    result := lFunc(lAssembly, lTypeName);
+  finally
+    MZObject.freeHandle(lAssembly);
+    MZObject.freeHandle(lTypeName);
+  end;
+end;
+
+// --- MZMethod ---
+
+constructor MZMethod withHandle(aHandle: ^Void);
+begin
+  if aHandle = nil then exit nil;
+  fHandle := aHandle;
+end;
+
+finalizer MZMethod;
+begin
+  if fHandle <> nil then begin
+    MZObject.freeHandle(fHandle);
+    fHandle := nil;
+  end;
+end;
+
+// --- MZCallFrame ---
+
+constructor MZCallFrame withMethod(aMethod: MZMethod) target(aTarget: ^Void) argumentCount(aArgumentCount: Integer);
+begin
+  if fCreateDelegate = nil then
+    fCreateDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "Create");
+  var lFunc: function(aMethod: ^Void; aTarget: ^Void; aArgumentCount: Integer): ^Void;
+  ^^Void(@lFunc)^ := fCreateDelegate;
+  fHandle := lFunc(aMethod.handle, aTarget, aArgumentCount);
+end;
+
+method MZCallFrame.setObject(aIndex: Integer) value(aValue: ^Void);
+begin
+  if fSetObjectDelegate = nil then fSetObjectDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetObject");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: ^Void);
+  ^^Void(@lFunc)^ := fSetObjectDelegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setString(aIndex: Integer) value(aValue: ^Void);
+begin
+  if fSetStringDelegate = nil then fSetStringDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetString");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: ^Void);
+  ^^Void(@lFunc)^ := fSetStringDelegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setBoolean(aIndex: Integer) value(aValue: Boolean);
+begin
+  if fSetBooleanDelegate = nil then fSetBooleanDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetBoolean");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: Boolean);
+  ^^Void(@lFunc)^ := fSetBooleanDelegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setInt32(aIndex: Integer) value(aValue: Int32);
+begin
+  if fSetI4Delegate = nil then fSetI4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetI4");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: Int32);
+  ^^Void(@lFunc)^ := fSetI4Delegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setUInt32(aIndex: Integer) value(aValue: UInt32);
+begin
+  if fSetU4Delegate = nil then fSetU4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetU4");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: UInt32);
+  ^^Void(@lFunc)^ := fSetU4Delegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setInt64(aIndex: Integer) value(aValue: Int64);
+begin
+  if fSetI8Delegate = nil then fSetI8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetI8");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: Int64);
+  ^^Void(@lFunc)^ := fSetI8Delegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setUInt64(aIndex: Integer) value(aValue: UInt64);
+begin
+  if fSetU8Delegate = nil then fSetU8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetU8");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: UInt64);
+  ^^Void(@lFunc)^ := fSetU8Delegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setSingle(aIndex: Integer) value(aValue: Single);
+begin
+  if fSetR4Delegate = nil then fSetR4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetR4");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: Single);
+  ^^Void(@lFunc)^ := fSetR4Delegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setDouble(aIndex: Integer) value(aValue: Double);
+begin
+  if fSetR8Delegate = nil then fSetR8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetR8");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: Double);
+  ^^Void(@lFunc)^ := fSetR8Delegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setIntPtr(aIndex: Integer) value(aValue: intptr_t);
+begin
+  if fSetIntPtrDelegate = nil then fSetIntPtrDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetIntPtr");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: intptr_t);
+  ^^Void(@lFunc)^ := fSetIntPtrDelegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.setDateTime(aIndex: Integer) value(aValue: MZDateTime);
+begin
+  if fSetDateTimeDelegate = nil then fSetDateTimeDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetDateTime");
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: MZDateTime);
+  ^^Void(@lFunc)^ := fSetDateTimeDelegate;
+  lFunc(fHandle, aIndex, aValue);
+end;
+
+method MZCallFrame.invoke: ^Void;
+begin
+  if fInvokeDelegate = nil then fInvokeDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "Invoke");
+  var lFunc: function(aFrame: ^Void): ^Void;
+  ^^Void(@lFunc)^ := fInvokeDelegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getObjectResult: ^Void;
+begin
+  if fGetObjectDelegate = nil then fGetObjectDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultObject");
+  var lFunc: function(aFrame: ^Void): ^Void;
+  ^^Void(@lFunc)^ := fGetObjectDelegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getStringResult: ^Void;
+begin
+  if fGetStringDelegate = nil then fGetStringDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultString");
+  var lFunc: function(aFrame: ^Void): ^Void;
+  ^^Void(@lFunc)^ := fGetStringDelegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getBooleanResult: Boolean;
+begin
+  if fGetBooleanDelegate = nil then fGetBooleanDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultBoolean");
+  var lFunc: function(aFrame: ^Void): Boolean;
+  ^^Void(@lFunc)^ := fGetBooleanDelegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getInt32Result: Int32;
+begin
+  if fGetI4Delegate = nil then fGetI4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultI4");
+  var lFunc: function(aFrame: ^Void): Int32;
+  ^^Void(@lFunc)^ := fGetI4Delegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getUInt32Result: UInt32;
+begin
+  if fGetU4Delegate = nil then fGetU4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultU4");
+  var lFunc: function(aFrame: ^Void): UInt32;
+  ^^Void(@lFunc)^ := fGetU4Delegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getInt64Result: Int64;
+begin
+  if fGetI8Delegate = nil then fGetI8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultI8");
+  var lFunc: function(aFrame: ^Void): Int64;
+  ^^Void(@lFunc)^ := fGetI8Delegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getUInt64Result: UInt64;
+begin
+  if fGetU8Delegate = nil then fGetU8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultU8");
+  var lFunc: function(aFrame: ^Void): UInt64;
+  ^^Void(@lFunc)^ := fGetU8Delegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getSingleResult: Single;
+begin
+  if fGetR4Delegate = nil then fGetR4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultR4");
+  var lFunc: function(aFrame: ^Void): Single;
+  ^^Void(@lFunc)^ := fGetR4Delegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getDoubleResult: Double;
+begin
+  if fGetR8Delegate = nil then fGetR8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultR8");
+  var lFunc: function(aFrame: ^Void): Double;
+  ^^Void(@lFunc)^ := fGetR8Delegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getIntPtrResult: intptr_t;
+begin
+  if fGetIntPtrDelegate = nil then fGetIntPtrDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultIntPtr");
+  var lFunc: function(aFrame: ^Void): intptr_t;
+  ^^Void(@lFunc)^ := fGetIntPtrDelegate;
+  exit lFunc(fHandle);
+end;
+
+method MZCallFrame.getDateTimeResult: MZDateTime;
+begin
+  if fGetDateTimeDelegate = nil then fGetDateTimeDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultDateTime");
+  var lFunc: function(aFrame: ^Void): MZDateTime;
+  ^^Void(@lFunc)^ := fGetDateTimeDelegate;
+  exit lFunc(fHandle);
+end;
+
+finalizer MZCallFrame;
+begin
+  if fHandle <> nil then begin
+    if fFreeDelegate = nil then fFreeDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "FreeHandle");
+    var lFree: procedure(aHandle: ^Void);
+    ^^Void(@lFree)^ := fFreeDelegate;
+    lFree(fHandle);
+    fHandle := nil;
+  end;
 end;
 
 // --- MZCoreAssembly ---
@@ -577,18 +898,24 @@ end;
 method MZObject.setInstance(aInstance: ^Void);
 begin
   if fInstance <> nil then begin
-    if fFreeHandleDelegate = nil then
-      fFreeHandleDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "FreeHandle");
-    var lFree: procedure(aHandle: ^Void);
-    ^^Void(@lFree)^ := fFreeHandleDelegate;
-    lFree(fInstance);
+    freeHandle(fInstance);
   end;
   fInstance := aInstance;
 end;
 
 method MZObject.description: NSString;
 begin
-  // Use managed bridge to get string representation
+  if fDescriptionDelegate = nil then
+    fDescriptionDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ToString");
+  var lFunc: function(aInstance: ^Void): ^Void;
+  ^^Void(@lFunc)^ := fDescriptionDelegate;
+  var lStringHandle := lFunc(fInstance);
+  if lStringHandle = nil then exit nil;
+  try
+    exit MZString.NSStringWithNetString(lStringHandle);
+  finally
+    freeHandle(lStringHandle);
+  end;
 end;
 
 method MZObject.&equals(aOther: MZObject): Boolean;
@@ -602,7 +929,35 @@ end;
 
 class method MZObject.raiseException(aEx: ^Void);
 begin
-  // Use managed bridge to get exception string and raise NSException
+  if aEx = nil then
+    raise new MZException withName("Exception") reason("Exception") userInfo(nil);
+
+  if fExceptionStringDelegate = nil then
+    fExceptionStringDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionToString");
+  var lFunc: function(aException: ^Void): ^Void;
+  ^^Void(@lFunc)^ := fExceptionStringDelegate;
+
+  var lStringHandle := lFunc(aEx);
+  var lMessage: NSString := "Exception";
+  if lStringHandle <> nil then begin
+    try
+      lMessage := MZString.NSStringWithNetString(lStringHandle);
+    finally
+      freeHandle(lStringHandle);
+    end;
+  end;
+  freeHandle(aEx);
+  raise new MZException withName("Exception") reason(lMessage) userInfo(nil);
+end;
+
+class method MZObject.freeHandle(aHandle: ^Void);
+begin
+  if aHandle = nil then exit;
+  if fFreeHandleDelegate = nil then
+    fFreeHandleDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "FreeHandle");
+  var lFree: procedure(aHandle: ^Void);
+  ^^Void(@lFree)^ := fFreeHandleDelegate;
+  lFree(aHandle);
 end;
 
 class method MZObject.getTypeCode: MZTypeCode;
