@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <RootNamespace>RemObjects.Marzipan.CoreHostTest</RootNamespace>
+    <ProjectGuid>{5F90F285-8B98-4F3A-9215-8D7218E37E1B}</ProjectGuid>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>RemObjects.Marzipan.CoreHostTest</AssemblyName>
+    <Configuration Condition="'$(Configuration)' == ''">Release</Configuration>
+    <SDK>macOS</SDK>
+    <DefaultUses>RemObjects.Elements.RTL</DefaultUses>
+    <Name>RemObjects.Marzipan.CoreHostTest</Name>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
+    <Optimize>False</Optimize>
+    <OutputPath>.\Bin\Debug</OutputPath>
+    <ConditionalDefines>DEBUG;TRACE;</ConditionalDefines>
+    <GenerateDebugInfo>True</GenerateDebugInfo>
+    <EnableAsserts>True</EnableAsserts>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Release' ">
+    <OutputPath>.\Bin\Release</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Foundation" />
+    <Reference Include="rtl" />
+    <Reference Include="libToffee" />
+    <Reference Include="libElements">
+      <HintPath>..\..\RTL2\Bin\Toffee\macOS\libElements.fx</HintPath>
+    </Reference>
+    <ProjectReference Include="..\RemObjects.Marzipan.Core\RemObjects.Marzipan.Core.elements">
+      <Project>{FDD173FC-78F5-4DFE-853E-8A9E092687F1}</Project>
+      <ProjectFile>..\RemObjects.Marzipan.Core\RemObjects.Marzipan.Core.elements</ProjectFile>
+    </ProjectReference>
+    <ProjectReference Include="..\CoreGenerated\CoreGeneratedWrapper.elements">
+      <Project>{F4B4546E-08A0-43D7-98DA-F0F8E84736F2}</Project>
+      <ProjectFile>..\CoreGenerated\CoreGeneratedWrapper.elements</ProjectFile>
+    </ProjectReference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Program.pas" />
+  </ItemGroup>
+  <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Toffee.targets" />
+</Project>

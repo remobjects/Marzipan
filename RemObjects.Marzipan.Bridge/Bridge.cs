@@ -58,12 +58,69 @@ namespace RemObjects.Marzipan.Bridge
         }
     }
 
+    internal static class Safe
+    {
+        public static T Value<T>(Func<T> action, T fallback = default)
+        {
+            try
+            {
+                return action();
+            }
+            catch (Exception ex)
+            {
+                LogUnhandledBridgeException(ex);
+                return fallback;
+            }
+        }
+
+        public static void Void(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception ex)
+            {
+                LogUnhandledBridgeException(ex);
+            }
+        }
+
+        private static void LogUnhandledBridgeException(Exception ex)
+        {
+            try
+            {
+                Console.Error.WriteLine("[MarzipanBridge] Suppressed exception escaping unmanaged callback:");
+                Console.Error.WriteLine(ex);
+            }
+            catch
+            {
+                // Logging must never be the thing that escapes an unmanaged callback.
+            }
+        }
+    }
+
     internal static class RuntimeState
     {
         private static readonly Dictionary<string, Assembly> AssembliesByName = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, Assembly> AssembliesByPath = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly HashSet<string> AssemblySearchPaths = new(StringComparer.OrdinalIgnoreCase);
         private static readonly Dictionary<string, Type> Types = new(StringComparer.Ordinal);
         private static readonly Dictionary<string, MethodBridge> Methods = new(StringComparer.Ordinal);
+
+        static RuntimeState()
+        {
+            // The native side loads product assemblies from an app-provided compiler folder
+            // instead of a normal .deps.json application layout. CoreCLR will happily load
+            // those explicit assemblies, but later dependency binds (for example MSBuild
+            // assemblies pulled in by RemObjects.Elements.Tools) still need a resolver.
+            //
+            // Every explicit LoadAssembly call records its directory below. When CoreCLR
+            // asks the default AssemblyLoadContext for a missing dependency, we probe those
+            // directories by simple assembly name. This keeps Fire's native bootstrap small:
+            // it only needs to tell Marzipan where the real DLL folders are, not enumerate
+            // every transitive framework/support DLL in dependency order.
+            AssemblyLoadContext.Default.Resolving += ResolveAssemblyFromRegisteredPaths;
+        }
 
         public static Assembly LoadAssembly(string path)
         {
@@ -73,11 +130,79 @@ namespace RemObjects.Marzipan.Bridge
                 if (AssembliesByPath.TryGetValue(fullPath, out var existing))
                     return existing;
 
+                RegisterAssemblySearchPath(Path.GetDirectoryName(fullPath));
                 var assembly = AssemblyLoadContext.Default.LoadFromAssemblyPath(fullPath);
                 AssembliesByPath[fullPath] = assembly;
                 AssembliesByName[assembly.GetName().Name ?? Path.GetFileNameWithoutExtension(fullPath)] = assembly;
                 return assembly;
             }
+        }
+
+        private static Assembly CacheLoadedAssembly(string fullPath, Assembly assembly)
+        {
+            AssembliesByPath[fullPath] = assembly;
+            AssembliesByName[assembly.GetName().Name ?? Path.GetFileNameWithoutExtension(fullPath)] = assembly;
+            return assembly;
+        }
+
+        private static void RegisterAssemblySearchPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            lock (AssemblySearchPaths)
+                AssemblySearchPaths.Add(Path.GetFullPath(path));
+        }
+
+        private static Assembly ResolveAssemblyFromRegisteredPaths(AssemblyLoadContext context, AssemblyName name)
+        {
+            try
+            {
+                var simpleName = name.Name;
+                if (string.IsNullOrWhiteSpace(simpleName))
+                    return null;
+
+                lock (AssembliesByName)
+                {
+                    if (AssembliesByName.TryGetValue(simpleName, out var alreadyLoaded))
+                        return alreadyLoaded;
+                }
+
+                string[] searchPaths;
+                lock (AssemblySearchPaths)
+                    searchPaths = AssemblySearchPaths.ToArray();
+
+                foreach (var folder in searchPaths)
+                {
+                    var candidate = Path.GetFullPath(Path.Combine(folder, simpleName + ".dll"));
+                    if (!File.Exists(candidate))
+                        continue;
+
+                    lock (AssembliesByPath)
+                    {
+                        if (AssembliesByPath.TryGetValue(candidate, out var existing))
+                            return existing;
+
+                        // Do not call RuntimeState.LoadAssembly from the Resolving event:
+                        // it performs the normal native-entry bookkeeping and can re-enter
+                        // this resolver while the CLR is already unwinding a failed bind.
+                        // Load directly into the requesting context and keep this resolver
+                        // strictly non-throwing.
+                        RegisterAssemblySearchPath(Path.GetDirectoryName(candidate));
+                        return CacheLoadedAssembly(candidate, context.LoadFromAssemblyPath(candidate));
+                    }
+                }
+            }
+            catch
+            {
+                // AssemblyLoadContext.Resolving is called from inside CoreCLR's bind path.
+                // Letting arbitrary IO/BadImage/FileLoad exceptions escape across that
+                // boundary can terminate an embedded host as a native PAL_SEHException.
+                // Returning null lets CoreCLR continue its normal failure path, which our
+                // invocation layer can surface as a managed exception handle.
+            }
+
+            return null;
         }
 
         public static Type ResolveType(string assemblyName, string typeName)
@@ -96,8 +221,8 @@ namespace RemObjects.Marzipan.Bridge
                     type = Type.GetType(typeName + ", " + assemblyName, false);
                 if (type == null)
                     type = AppDomain.CurrentDomain.GetAssemblies()
-                    .Select(a => a.GetType(typeName, false))
-                    .FirstOrDefault(t => t != null);
+                        .Select(a => Safe.Value(() => a.GetType(typeName, false), null as Type))
+                        .FirstOrDefault(t => t != null);
 
                 if (type == null)
                     throw new TypeLoadException($"Could not resolve type '{typeName}, {assemblyName}'.");
@@ -240,29 +365,73 @@ namespace RemObjects.Marzipan.Bridge
     public static class ObjectHelpers
     {
         [UnmanagedCallersOnly(EntryPoint = "MZ_GCHandle_Free")]
-        public static void FreeHandle(IntPtr handle) => Handles.Free(handle);
+        public static void FreeHandle(IntPtr handle) => Safe.Void(() => Handles.Free(handle));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_Object_Equals")]
-        public static bool Equals(IntPtr instance, IntPtr other) =>
-            object.Equals(Handles.Target(instance), Handles.Target(other));
+        public static byte Equals(IntPtr instance, IntPtr other) =>
+            Safe.Value(() => object.Equals(Handles.Target(instance), Handles.Target(other)) ? (byte)1 : (byte)0, (byte)0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_Object_ToString")]
         public static IntPtr ToString(IntPtr instance)
         {
-            var value = Handles.Target(instance)?.ToString() ?? "";
-            return Handles.Alloc(value);
+            return Safe.Value(() =>
+            {
+                var value = Handles.Target(instance)?.ToString() ?? "";
+                return Handles.Alloc(value);
+            }, IntPtr.Zero);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_Object_ExceptionToString")]
         public static IntPtr ExceptionToString(IntPtr exception)
         {
-            var value = Handles.Target(exception)?.ToString() ?? "Exception";
-            return Handles.Alloc(value);
+            return Safe.Value(() =>
+            {
+                var value = Handles.Target(exception)?.ToString() ?? "Exception";
+                return Handles.Alloc(value);
+            }, IntPtr.Zero);
+        }
+
+        [UnmanagedCallersOnly(EntryPoint = "MZ_Object_ForceGarbageCollection")]
+        public static IntPtr ForceGarbageCollection()
+        {
+            return Safe.Value(() =>
+            {
+                static string CollectionCounts(int maxGeneration)
+                {
+                    var result = new List<string>();
+                    for (var generation = 0; generation <= maxGeneration; generation++)
+                        result.Add($"{generation}:{GC.CollectionCount(generation)}");
+                    return string.Join(", ", result);
+                }
+
+                var beforeUsed = GC.GetTotalMemory(false);
+                var maxGeneration = GC.MaxGeneration;
+                var beforeCollections = CollectionCounts(maxGeneration);
+
+                GC.Collect(maxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+                GC.WaitForPendingFinalizers();
+                GC.Collect(maxGeneration, GCCollectionMode.Forced, blocking: true, compacting: true);
+
+                var afterUsed = GC.GetTotalMemory(false);
+                var afterCollections = CollectionCounts(maxGeneration);
+
+                return Handles.Alloc($"""
+                    .NET GC forced.
+                    Used: {beforeUsed:n0} bytes -> {afterUsed:n0} bytes
+                    Collections: {beforeCollections} -> {afterCollections}
+                    """);
+            }, IntPtr.Zero);
         }
     }
 
     public static class RuntimeHelpers
     {
+        [UnmanagedCallersOnly(EntryPoint = "MZ_Runtime_GetBridgeBuildInfo")]
+        public static IntPtr GetBridgeBuildInfo()
+        {
+            return Safe.Value(() => Handles.Alloc("RemObjects.Marzipan.Bridge build 2026-07-09 13:57 safe-callbacks"), IntPtr.Zero);
+        }
+
         [UnmanagedCallersOnly(EntryPoint = "MZ_Runtime_LoadAssemblyHandle")]
         public static IntPtr LoadAssemblyHandle(IntPtr pathHandle)
         {
@@ -301,78 +470,332 @@ namespace RemObjects.Marzipan.Bridge
     public static class StringHelpers
     {
         [UnmanagedCallersOnly(EntryPoint = "MZ_String_GetLength")]
-        public static int GetLength(IntPtr instance) => Handles.Target<string>(instance)?.Length ?? 0;
+        public static int GetLength(IntPtr instance) => Safe.Value(() => Handles.Target<string>(instance)?.Length ?? 0, 0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_String_GetChars")]
         public static IntPtr GetChars(IntPtr instance, IntPtr outChars, IntPtr outLength)
         {
-            var value = Handles.Target<string>(instance);
-            if (value == null || outChars == IntPtr.Zero || outLength == IntPtr.Zero)
-                return IntPtr.Zero;
+            return Safe.Value(() =>
+            {
+                var value = Handles.Target<string>(instance);
+                if (value == null || outChars == IntPtr.Zero || outLength == IntPtr.Zero)
+                    return IntPtr.Zero;
 
-            var pin = GCHandle.Alloc(value, GCHandleType.Pinned);
-            Marshal.WriteIntPtr(outChars, pin.AddrOfPinnedObject());
-            Marshal.WriteInt32(outLength, value.Length);
-            return GCHandle.ToIntPtr(pin);
+                var pin = GCHandle.Alloc(value, GCHandleType.Pinned);
+                Marshal.WriteIntPtr(outChars, pin.AddrOfPinnedObject());
+                Marshal.WriteInt32(outLength, value.Length);
+                return GCHandle.ToIntPtr(pin);
+            }, IntPtr.Zero);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_String_ReleaseChars")]
-        public static void ReleaseChars(IntPtr handle) => Handles.Free(handle);
+        public static void ReleaseChars(IntPtr handle) => Safe.Void(() => Handles.Free(handle));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_String_FromUTF16")]
-        public static IntPtr FromUTF16(IntPtr chars, int length) => Handles.Alloc(Utf16.FromNative(chars, length) ?? "");
+        public static IntPtr FromUTF16(IntPtr chars, int length) => Safe.Value(() => Handles.Alloc(Utf16.FromNative(chars, length) ?? ""), IntPtr.Zero);
     }
 
     public static class ArrayHelpers
     {
         [UnmanagedCallersOnly(EntryPoint = "MZ_Array_GetCount")]
-        public static int GetCount(IntPtr array) => Handles.Target<Array>(array)?.Length ?? 0;
+        public static int GetCount(IntPtr array) => Safe.Value(() => Handles.Target<Array>(array)?.Length ?? 0, 0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_Array_GetElement")]
         public static IntPtr GetElement(IntPtr array, int index)
         {
-            var value = Handles.Target<Array>(array);
-            return value == null ? IntPtr.Zero : Handles.Alloc(value.GetValue(index));
+            return Safe.Value(() =>
+            {
+                var value = Handles.Target<Array>(array);
+                return value == null ? IntPtr.Zero : Handles.Alloc(value.GetValue(index));
+            }, IntPtr.Zero);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_Array_SetElement")]
         public static void SetElement(IntPtr array, int index, IntPtr value)
         {
-            Handles.Target<Array>(array)?.SetValue(Handles.Target(value), index);
+            Safe.Void(() => Handles.Target<Array>(array)?.SetValue(Handles.Target(value), index));
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_Array_FromStringArray")]
         public static IntPtr FromStringArray(IntPtr strings, int count)
         {
-            if (strings == IntPtr.Zero || count <= 0)
-                return Handles.Alloc(Array.Empty<string>());
-            var result = new string[count];
-            for (var i = 0; i < count; i++)
+            return Safe.Value(() =>
             {
-                var handle = Marshal.ReadIntPtr(strings, i * IntPtr.Size);
-                result[i] = Handles.Target<string>(handle);
-            }
-            return Handles.Alloc(result);
+                if (strings == IntPtr.Zero || count <= 0)
+                    return Handles.Alloc(Array.Empty<string>());
+                var result = new string[count];
+                for (var i = 0; i < count; i++)
+                {
+                    var handle = Marshal.ReadIntPtr(strings, i * IntPtr.Size);
+                    result[i] = Handles.Target<string>(handle);
+                }
+                return Handles.Alloc(result);
+            }, IntPtr.Zero);
         }
     }
 
     public static class ListHelpers
     {
         [UnmanagedCallersOnly(EntryPoint = "MZ_List_GetCount")]
-        public static int GetCount(IntPtr list) => Handles.Target<IList>(list)?.Count ?? 0;
+        public static int GetCount(IntPtr list) => Safe.Value(() => Handles.Target<IList>(list)?.Count ?? 0, 0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_List_GetElement")]
         public static IntPtr GetElement(IntPtr list, int index)
         {
-            var value = Handles.Target<IList>(list);
-            return value == null ? IntPtr.Zero : Handles.Alloc(value[index]);
+            return Safe.Value(() =>
+            {
+                var value = Handles.Target<IList>(list);
+                return value == null ? IntPtr.Zero : Handles.Alloc(value[index]);
+            }, IntPtr.Zero);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_List_Clear")]
-        public static void Clear(IntPtr list) => Handles.Target<IList>(list)?.Clear();
+        public static void Clear(IntPtr list) => Safe.Void(() => Handles.Target<IList>(list)?.Clear());
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_List_FromObject")]
-        public static IntPtr FromObject(IntPtr value) => Handles.Alloc(new ArrayList { Handles.Target(value) });
+        public static IntPtr FromObject(IntPtr value) => Safe.Value(() => Handles.Alloc(new ArrayList { Handles.Target(value) }), IntPtr.Zero);
+    }
+
+    internal sealed class DebugEngineCallbackBridge
+    {
+        private readonly object debugEngine;
+        private readonly IntPtr userData;
+        private readonly DebugProgressCallback debugProgress;
+        private readonly ObjectCallback threadStarted;
+        private readonly ObjectCallback threadFinished;
+        private readonly ObjectCallback threadRenamed;
+        private readonly IntCallback processTerminated;
+        private readonly VoidCallback processStarted;
+        private readonly VoidCallback processReady;
+        private readonly StringCallback processFailedToStart;
+        private readonly TwoStringCallback log;
+        private readonly StringCallback stdOut;
+        private readonly StringCallback stdErr;
+        private readonly TwoObjectCallback breakStop;
+        private readonly ObjectCallback breakpointResolved;
+        private readonly ObjectStringCallback breakpointSignal;
+        private readonly RemoteFileNeededCallback remoteFileNeeded;
+        private readonly BreakExceptionCallback breakException;
+        private readonly VoidCallback disposed;
+        private readonly ObjectCallback moduleLoad;
+        private readonly ObjectCallback moduleUnload;
+
+        public DebugEngineCallbackBridge(
+            object debugEngine,
+            IntPtr userData,
+            IntPtr debugProgress,
+            IntPtr threadStarted,
+            IntPtr threadFinished,
+            IntPtr threadRenamed,
+            IntPtr processTerminated,
+            IntPtr processStarted,
+            IntPtr processReady,
+            IntPtr processFailedToStart,
+            IntPtr log,
+            IntPtr stdOut,
+            IntPtr stdErr,
+            IntPtr breakStop,
+            IntPtr breakpointResolved,
+            IntPtr breakpointSignal,
+            IntPtr remoteFileNeeded,
+            IntPtr breakException,
+            IntPtr disposed,
+            IntPtr moduleLoad,
+            IntPtr moduleUnload)
+        {
+            this.debugEngine = debugEngine ?? throw new ArgumentNullException(nameof(debugEngine));
+            this.userData = userData;
+            this.debugProgress = Callback<DebugProgressCallback>(debugProgress);
+            this.threadStarted = Callback<ObjectCallback>(threadStarted);
+            this.threadFinished = Callback<ObjectCallback>(threadFinished);
+            this.threadRenamed = Callback<ObjectCallback>(threadRenamed);
+            this.processTerminated = Callback<IntCallback>(processTerminated);
+            this.processStarted = Callback<VoidCallback>(processStarted);
+            this.processReady = Callback<VoidCallback>(processReady);
+            this.processFailedToStart = Callback<StringCallback>(processFailedToStart);
+            this.log = Callback<TwoStringCallback>(log);
+            this.stdOut = Callback<StringCallback>(stdOut);
+            this.stdErr = Callback<StringCallback>(stdErr);
+            this.breakStop = Callback<TwoObjectCallback>(breakStop);
+            this.breakpointResolved = Callback<ObjectCallback>(breakpointResolved);
+            this.breakpointSignal = Callback<ObjectStringCallback>(breakpointSignal);
+            this.remoteFileNeeded = Callback<RemoteFileNeededCallback>(remoteFileNeeded);
+            this.breakException = Callback<BreakExceptionCallback>(breakException);
+            this.disposed = Callback<VoidCallback>(disposed);
+            this.moduleLoad = Callback<ObjectCallback>(moduleLoad);
+            this.moduleUnload = Callback<ObjectCallback>(moduleUnload);
+        }
+
+        public void Attach()
+        {
+            // This mirrors RemObjects.Elements.Debugger.MarzipanDebugEngineHelpers,
+            // but replaces Mono internal-calls with explicit unmanaged callbacks.
+            // The debug engine object lives in the real compiler/debug assembly; the
+            // bridge stays decoupled by subscribing through normal event names.
+            var attached = 0;
+            var attempted = 0;
+
+            if (Add("DebugProgress", new Action<int, string>((percentage, message) => debugProgress?.Invoke(userData, percentage, Handles.Alloc(message))))) attached++; attempted++;
+            if (Add("ThreadStarted", new Action<object>(thread => threadStarted?.Invoke(userData, Handles.Alloc(thread))))) attached++; attempted++;
+            if (Add("ThreadFinished", new Action<object>(thread => threadFinished?.Invoke(userData, Handles.Alloc(thread))))) attached++; attempted++;
+            if (Add("ThreadRenamed", new Action<object>(thread => threadRenamed?.Invoke(userData, Handles.Alloc(thread))))) attached++; attempted++;
+            if (Add("ProcessTerminated", new Action<int>(exitCode => processTerminated?.Invoke(userData, exitCode)))) attached++; attempted++;
+            if (Add("ProcessStarted", new Action(() => processStarted?.Invoke(userData)))) attached++; attempted++;
+            if (Add("ProcessReady", new Action(() => processReady?.Invoke(userData)))) attached++; attempted++;
+            if (Add("ProcessFailedToStart", new Action<string>(message => processFailedToStart?.Invoke(userData, Handles.Alloc(message))))) attached++; attempted++;
+            if (Add("Log", new Action<string, string>((source, message) => log?.Invoke(userData, Handles.Alloc(source), Handles.Alloc(message))))) attached++; attempted++;
+            if (Add("STDOut", new Action<string>(message => stdOut?.Invoke(userData, Handles.Alloc(message))))) attached++; attempted++;
+            if (Add("STDErr", new Action<string>(message => stdErr?.Invoke(userData, Handles.Alloc(message))))) attached++; attempted++;
+            if (Add("BreakStop", new Action<object, object>((thread, breakpoint) => breakStop?.Invoke(userData, Handles.Alloc(thread), Handles.Alloc(breakpoint))))) attached++; attempted++;
+            if (Add("BreakpointResolved", new Action<object>(breakpoint => breakpointResolved?.Invoke(userData, Handles.Alloc(breakpoint))))) attached++; attempted++;
+            if (Add("BreakpointSignal", new Action<object, string>((thread, signal) => breakpointSignal?.Invoke(userData, Handles.Alloc(thread), Handles.Alloc(signal))))) attached++; attempted++;
+            if (Add("RemoteFileNeeded", new Func<string, string>(remoteFileName =>
+            {
+                if (remoteFileNeeded == null)
+                    return remoteFileName;
+
+                var resultHandle = remoteFileNeeded(userData, Handles.Alloc(remoteFileName));
+                try
+                {
+                    return Handles.Target<string>(resultHandle) ?? remoteFileName;
+                }
+                finally
+                {
+                    Handles.Free(resultHandle);
+                }
+            }))) attached++; attempted++;
+            if (Add("BreakException", new Action<object, bool, string, string>((thread, fatal, type, message) =>
+                breakException?.Invoke(userData, Handles.Alloc(thread), fatal ? (byte)1 : (byte)0, Handles.Alloc(type), Handles.Alloc(message))))) attached++; attempted++;
+            if (Add("ModuleLoad", new Action<object>(module => moduleLoad?.Invoke(userData, Handles.Alloc(module))))) attached++; attempted++;
+            if (Add("ModuleUnload", new Action<object>(module => moduleUnload?.Invoke(userData, Handles.Alloc(module))))) attached++; attempted++;
+
+            EmitLog($"Debug callback bridge attached {attached}/{attempted} events to {debugEngine.GetType().FullName}.");
+        }
+
+        ~DebugEngineCallbackBridge()
+        {
+            disposed?.Invoke(userData);
+        }
+
+        private bool Add(string name, Delegate handler)
+        {
+            var eventInfo = debugEngine.GetType().GetEvent(name, BindingFlags.Public | BindingFlags.Instance);
+            if (eventInfo == null)
+            {
+                EmitLog($"Debug callback event missing: {debugEngine.GetType().FullName}.{name}");
+                return false;
+            }
+
+            try
+            {
+                var typedHandler = handler;
+                if (handler.GetType() != eventInfo.EventHandlerType)
+                    typedHandler = Delegate.CreateDelegate(eventInfo.EventHandlerType, handler.Target, handler.Method);
+
+                eventInfo.AddEventHandler(debugEngine, typedHandler);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                EmitLog($"Debug callback attach failed for {name}: event handler type {eventInfo.EventHandlerType?.FullName}, native bridge handler type {handler.GetType().FullName}: {ex.GetType().FullName}: {ex.Message}");
+                return false;
+            }
+        }
+
+        private void EmitLog(string message)
+        {
+            try
+            {
+                if (log != null)
+                    log(userData, Handles.Alloc("MarzipanBridge"), Handles.Alloc(message));
+                else
+                    Console.Error.WriteLine("[MarzipanBridge] " + message);
+            }
+            catch
+            {
+                // Diagnostics must never be able to break debugger startup.
+            }
+        }
+
+        private static T Callback<T>(IntPtr value) where T : class =>
+            value == IntPtr.Zero ? null : Marshal.GetDelegateForFunctionPointer(value, typeof(T)) as T;
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void VoidCallback(IntPtr userData);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void IntCallback(IntPtr userData, int value);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void ObjectCallback(IntPtr userData, IntPtr value);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void StringCallback(IntPtr userData, IntPtr value);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void TwoStringCallback(IntPtr userData, IntPtr first, IntPtr second);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void ObjectStringCallback(IntPtr userData, IntPtr first, IntPtr second);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void TwoObjectCallback(IntPtr userData, IntPtr first, IntPtr second);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate IntPtr RemoteFileNeededCallback(IntPtr userData, IntPtr remoteFileName);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void BreakExceptionCallback(IntPtr userData, IntPtr thread, byte fatal, IntPtr type, IntPtr message);
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        private delegate void DebugProgressCallback(IntPtr userData, int percentage, IntPtr message);
+    }
+
+    public static class DebugEngineCallbackHelpers
+    {
+        [UnmanagedCallersOnly(EntryPoint = "MZ_DebugEngine_AttachCallbacks")]
+        public static IntPtr AttachCallbacks(
+            IntPtr debugEngine,
+            IntPtr userData,
+            IntPtr debugProgress,
+            IntPtr threadStarted,
+            IntPtr threadFinished,
+            IntPtr threadRenamed,
+            IntPtr processTerminated,
+            IntPtr processStarted,
+            IntPtr processReady,
+            IntPtr processFailedToStart,
+            IntPtr log,
+            IntPtr stdOut,
+            IntPtr stdErr,
+            IntPtr breakStop,
+            IntPtr breakpointResolved,
+            IntPtr breakpointSignal,
+            IntPtr remoteFileNeeded,
+            IntPtr breakException,
+            IntPtr disposed,
+            IntPtr moduleLoad,
+            IntPtr moduleUnload)
+        {
+            return Safe.Value(() =>
+            {
+                var bridge = new DebugEngineCallbackBridge(
+                    Handles.Target(debugEngine),
+                    userData,
+                    debugProgress,
+                    threadStarted,
+                    threadFinished,
+                    threadRenamed,
+                    processTerminated,
+                    processStarted,
+                    processReady,
+                    processFailedToStart,
+                    log,
+                    stdOut,
+                    stdErr,
+                    breakStop,
+                    breakpointResolved,
+                    breakpointSignal,
+                    remoteFileNeeded,
+                    breakException,
+                    disposed,
+                    moduleLoad,
+                    moduleUnload);
+                bridge.Attach();
+                return Handles.Alloc(bridge);
+            }, IntPtr.Zero);
+        }
     }
 
     public static class TypeHelpers
@@ -447,52 +870,55 @@ namespace RemObjects.Marzipan.Bridge
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_Create")]
         public static IntPtr Create(IntPtr methodHandle, IntPtr targetHandle, int argumentCount)
         {
-            var method = Handles.Target<MethodBridge>(methodHandle);
-            if (method == null)
-                return IntPtr.Zero;
-
-            return Handles.Alloc(new CallFrame
+            return Safe.Value(() =>
             {
-                Method = method,
-                Target = Handles.Target(targetHandle),
-                Arguments = new object[Math.Max(argumentCount, method.Parameters.Length)]
-            });
+                var method = Handles.Target<MethodBridge>(methodHandle);
+                if (method == null)
+                    return IntPtr.Zero;
+
+                return Handles.Alloc(new CallFrame
+                {
+                    Method = method,
+                    Target = Handles.Target(targetHandle),
+                    Arguments = new object[Math.Max(argumentCount, method.Parameters.Length)]
+                });
+            }, IntPtr.Zero);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetObject")]
         public static void SetObject(IntPtr frameHandle, int index, IntPtr valueHandle) =>
-            Set(frameHandle, index, Handles.Target(valueHandle));
+            Safe.Void(() => Set(frameHandle, index, Handles.Target(valueHandle)));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetString")]
         public static void SetString(IntPtr frameHandle, int index, IntPtr valueHandle) =>
-            Set(frameHandle, index, Handles.Target<string>(valueHandle));
+            Safe.Void(() => Set(frameHandle, index, Handles.Target<string>(valueHandle)));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetBoolean")]
-        public static void SetBoolean(IntPtr frameHandle, int index, bool value) => Set(frameHandle, index, value);
+        public static void SetBoolean(IntPtr frameHandle, int index, byte value) => Safe.Void(() => Set(frameHandle, index, value != 0));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetI4")]
-        public static void SetI4(IntPtr frameHandle, int index, int value) => Set(frameHandle, index, value);
+        public static void SetI4(IntPtr frameHandle, int index, int value) => Safe.Void(() => Set(frameHandle, index, value));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetU4")]
-        public static void SetU4(IntPtr frameHandle, int index, uint value) => Set(frameHandle, index, value);
+        public static void SetU4(IntPtr frameHandle, int index, uint value) => Safe.Void(() => Set(frameHandle, index, value));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetI8")]
-        public static void SetI8(IntPtr frameHandle, int index, long value) => Set(frameHandle, index, value);
+        public static void SetI8(IntPtr frameHandle, int index, long value) => Safe.Void(() => Set(frameHandle, index, value));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetU8")]
-        public static void SetU8(IntPtr frameHandle, int index, ulong value) => Set(frameHandle, index, value);
+        public static void SetU8(IntPtr frameHandle, int index, ulong value) => Safe.Void(() => Set(frameHandle, index, value));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetR4")]
-        public static void SetR4(IntPtr frameHandle, int index, float value) => Set(frameHandle, index, value);
+        public static void SetR4(IntPtr frameHandle, int index, float value) => Safe.Void(() => Set(frameHandle, index, value));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetR8")]
-        public static void SetR8(IntPtr frameHandle, int index, double value) => Set(frameHandle, index, value);
+        public static void SetR8(IntPtr frameHandle, int index, double value) => Safe.Void(() => Set(frameHandle, index, value));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetIntPtr")]
-        public static void SetIntPtr(IntPtr frameHandle, int index, IntPtr value) => Set(frameHandle, index, value);
+        public static void SetIntPtr(IntPtr frameHandle, int index, IntPtr value) => Safe.Void(() => Set(frameHandle, index, value));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_SetDateTime")]
-        public static void SetDateTime(IntPtr frameHandle, int index, long ticks) => Set(frameHandle, index, new DateTime(ticks));
+        public static void SetDateTime(IntPtr frameHandle, int index, long ticks) => Safe.Void(() => Set(frameHandle, index, new DateTime(ticks)));
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_Invoke")]
         public static IntPtr Invoke(IntPtr frameHandle)
@@ -523,60 +949,66 @@ namespace RemObjects.Marzipan.Bridge
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultObject")]
-        public static IntPtr GetResultObject(IntPtr frameHandle) => Handles.Alloc(Handles.Target<CallFrame>(frameHandle)?.Result);
+        public static IntPtr GetResultObject(IntPtr frameHandle) => Safe.Value(() => Handles.Alloc(Handles.Target<CallFrame>(frameHandle)?.Result), IntPtr.Zero);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultString")]
-        public static IntPtr GetResultString(IntPtr frameHandle) => Handles.Alloc(Handles.Target<CallFrame>(frameHandle)?.Result as string);
+        public static IntPtr GetResultString(IntPtr frameHandle) => Safe.Value(() => Handles.Alloc(Handles.Target<CallFrame>(frameHandle)?.Result as string), IntPtr.Zero);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultBoolean")]
-        public static bool GetResultBoolean(IntPtr frameHandle) => Convert.ToBoolean(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture);
+        public static byte GetResultBoolean(IntPtr frameHandle) => Safe.Value(() => Convert.ToBoolean(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture) ? (byte)1 : (byte)0, (byte)0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultI4")]
-        public static int GetResultI4(IntPtr frameHandle) => Convert.ToInt32(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture);
+        public static int GetResultI4(IntPtr frameHandle) => Safe.Value(() => Convert.ToInt32(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture), 0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultU4")]
-        public static uint GetResultU4(IntPtr frameHandle) => Convert.ToUInt32(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture);
+        public static uint GetResultU4(IntPtr frameHandle) => Safe.Value(() => Convert.ToUInt32(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture), 0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultI8")]
-        public static long GetResultI8(IntPtr frameHandle) => Convert.ToInt64(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture);
+        public static long GetResultI8(IntPtr frameHandle) => Safe.Value(() => Convert.ToInt64(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture), 0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultU8")]
-        public static ulong GetResultU8(IntPtr frameHandle) => Convert.ToUInt64(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture);
+        public static ulong GetResultU8(IntPtr frameHandle) => Safe.Value(() => Convert.ToUInt64(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture), 0);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultR4")]
-        public static float GetResultR4(IntPtr frameHandle) => Convert.ToSingle(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture);
+        public static float GetResultR4(IntPtr frameHandle) => Safe.Value(() => Convert.ToSingle(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture), 0f);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultR8")]
-        public static double GetResultR8(IntPtr frameHandle) => Convert.ToDouble(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture);
+        public static double GetResultR8(IntPtr frameHandle) => Safe.Value(() => Convert.ToDouble(Handles.Target<CallFrame>(frameHandle)?.Result, CultureInfo.InvariantCulture), 0d);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultIntPtr")]
         public static IntPtr GetResultIntPtr(IntPtr frameHandle)
         {
-            var result = Handles.Target<CallFrame>(frameHandle)?.Result;
-            if (result is IntPtr value)
-                return value;
-            if (result is UIntPtr unsignedValue)
-                return new IntPtr(unchecked((long)unsignedValue.ToUInt64()));
-            return new IntPtr(Convert.ToInt64(result, CultureInfo.InvariantCulture));
+            return Safe.Value(() =>
+            {
+                var result = Handles.Target<CallFrame>(frameHandle)?.Result;
+                if (result is IntPtr value)
+                    return value;
+                if (result is UIntPtr unsignedValue)
+                    return new IntPtr(unchecked((long)unsignedValue.ToUInt64()));
+                return new IntPtr(Convert.ToInt64(result, CultureInfo.InvariantCulture));
+            }, IntPtr.Zero);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetResultDateTime")]
         public static long GetResultDateTime(IntPtr frameHandle)
         {
-            var result = Handles.Target<CallFrame>(frameHandle)?.Result;
-            if (result is DateTime value)
-                return value.Ticks;
-            return 0;
+            return Safe.Value(() =>
+            {
+                var result = Handles.Target<CallFrame>(frameHandle)?.Result;
+                if (result is DateTime value)
+                    return value.Ticks;
+                return 0;
+            }, 0);
         }
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetArgumentObject")]
-        public static IntPtr GetArgumentObject(IntPtr frameHandle, int index) => Handles.Alloc(GetArgument(frameHandle, index));
+        public static IntPtr GetArgumentObject(IntPtr frameHandle, int index) => Safe.Value(() => Handles.Alloc(GetArgument(frameHandle, index)), IntPtr.Zero);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetArgumentString")]
-        public static IntPtr GetArgumentString(IntPtr frameHandle, int index) => Handles.Alloc(GetArgument(frameHandle, index) as string);
+        public static IntPtr GetArgumentString(IntPtr frameHandle, int index) => Safe.Value(() => Handles.Alloc(GetArgument(frameHandle, index) as string), IntPtr.Zero);
 
         [UnmanagedCallersOnly(EntryPoint = "MZ_CallFrame_GetArgumentI4")]
-        public static int GetArgumentI4(IntPtr frameHandle, int index) => Convert.ToInt32(GetArgument(frameHandle, index), CultureInfo.InvariantCulture);
+        public static int GetArgumentI4(IntPtr frameHandle, int index) => Safe.Value(() => Convert.ToInt32(GetArgument(frameHandle, index), CultureInfo.InvariantCulture), 0);
 
         private static void Set(IntPtr frameHandle, int index, object value)
         {

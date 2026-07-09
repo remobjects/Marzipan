@@ -51,10 +51,16 @@ type
     method WrapObject(aVal: CGExpression; aType: CGTypeReference): CGExpression;
     method SigTypeToString(aType: TypeReference): String;
     method SafeIdentifier(aName: String): String;
+    method ShouldUseCoreOpaqueType(aType: TypeReference): Boolean;
     method EnsureCoreOpaqueType(aType: TypeReference): String;
     method GenerateCoreMethod(aType: TypeDefinition; aMethod: MethodDefinition; aGeneratedMethod: CGMethodDefinition; aMethodField: CGFieldDefinition; aTypePropertyName: String);
     method AddCoreSetArgument(aBlock: CGBeginEndBlockStatement; aFrameName: String; aIndex: Integer; aParameterName: String; aType: TypeReference; aUseDefaultValue: Boolean);
+    method AddCoreCopyBackArgument(aBlock: CGBeginEndBlockStatement; aFrameName: String; aIndex: Integer; aParameterName: String; aType: TypeReference);
     method CoreResultExpression(aFrameName: String; aType: TypeReference; aPublicType: CGTypeReference): CGExpression;
+    method AddDotNetSearchPaths;
+    method AddDotNetRootSearchPaths(aRoot: String);
+    method AddDirectoryIfExists(aPath: String);
+    method CandidateScore(aPath: String; aName: AssemblyNameReference): Integer;
 
     fSettings: ImporterSettings;
     fUseCore: Boolean;
@@ -116,6 +122,95 @@ begin
   //fImportNameMapping.Add('System.Guid', 'SystemGuid');
 
   fReservedCocoaMemberNames.Add("description");
+
+  if fUseCore then
+    AddDotNetSearchPaths;
+end;
+
+method Importer.AddDirectoryIfExists(aPath: String);
+begin
+  if not String.IsNullOrEmpty(aPath) and Directory.Exists(aPath) then
+    fPaths.Add(aPath);
+end;
+
+method Importer.AddDotNetSearchPaths;
+begin
+  // Core compiler assemblies reference framework assemblies such as
+  // System.Collections. Those are intentionally not copied into Fire's compiler
+  // folder, so the importer needs to know where the local dotnet installation
+  // keeps runtime and reference-pack assemblies. This is only for Cecil metadata
+  // resolution during import generation; app runtime hosting still uses the
+  // explicit runtimeRoot passed to MZCoreRuntime.
+  var lRoots := new List<String>;
+
+  var lDotNetRoot := Environment.GetEnvironmentVariable("DOTNET_ROOT");
+  if not String.IsNullOrEmpty(lDotNetRoot) then
+    lRoots.Add(lDotNetRoot);
+
+  lRoots.Add("/usr/local/share/dotnet");
+  lRoots.Add("/usr/local/share/dotnet/x64");
+  lRoots.Add("/opt/homebrew/share/dotnet");
+  lRoots.Add("/usr/share/dotnet");
+
+  for each lRoot in lRoots.Distinct do
+    AddDotNetRootSearchPaths(lRoot);
+end;
+
+method Importer.AddDotNetRootSearchPaths(aRoot: String);
+begin
+  if String.IsNullOrEmpty(aRoot) or not Directory.Exists(aRoot) then
+    exit;
+
+  var lSharedRoot := Path.Combine(aRoot, "shared", "Microsoft.NETCore.App");
+  if Directory.Exists(lSharedRoot) then
+    for each lDir in Directory.GetDirectories(lSharedRoot) do
+      AddDirectoryIfExists(lDir);
+
+  var lRefPackRoot := Path.Combine(aRoot, "packs", "Microsoft.NETCore.App.Ref");
+  if Directory.Exists(lRefPackRoot) then
+    for each lVersionDir in Directory.GetDirectories(lRefPackRoot) do begin
+      var lRefRoot := Path.Combine(lVersionDir, "ref");
+      if Directory.Exists(lRefRoot) then
+        for each lRefDir in Directory.GetDirectories(lRefRoot) do
+          AddDirectoryIfExists(lRefDir);
+    end;
+
+  var lNetStandardRefRoot := Path.Combine(aRoot, "packs", "NETStandard.Library.Ref");
+  if Directory.Exists(lNetStandardRefRoot) then
+    for each lVersionDir in Directory.GetDirectories(lNetStandardRefRoot) do begin
+      var lRefRoot := Path.Combine(lVersionDir, "ref");
+      if Directory.Exists(lRefRoot) then
+        for each lRefDir in Directory.GetDirectories(lRefRoot) do
+          AddDirectoryIfExists(lRefDir);
+    end;
+end;
+
+method Importer.CandidateScore(aPath: String; aName: AssemblyNameReference): Integer;
+begin
+  result := 100;
+
+  if aName.Version = nil then
+    exit;
+
+  var lPath := aPath.Replace(Path.DirectorySeparatorChar, '/');
+  var lMajor := aName.Version.Major.ToString;
+
+  if String.Equals(aName.Name, "netstandard", StringComparison.OrdinalIgnoreCase) then begin
+    if lPath.Contains('/packs/NETStandard.Library.Ref/') then
+      exit 0;
+
+    if lPath.Contains('/packs/Microsoft.NETCore.App.Ref/') then
+      exit 1;
+  end;
+
+  if lPath.Contains('/ref/net'+lMajor+'.0/') then
+    exit 0;
+
+  if lPath.Contains('/shared/Microsoft.NETCore.App/'+lMajor+'.') then
+    exit 10;
+
+  if lPath.Contains('/Microsoft.NETCore.App.Ref/') then
+    exit 20;
 end;
 
 method Importer.Run;
@@ -690,7 +785,7 @@ begin
   var lRes: String;
   if self.fImportNameMapping.TryGetValue(aType.FullName, out lRes) then
     exit new CGNamedTypeReference(lRes);
-  if fUseCore and IsObjectRef(aType) then
+  if fUseCore and ShouldUseCoreOpaqueType(aType) then
     exit new CGNamedTypeReference(EnsureCoreOpaqueType(aType));
   exit MZObjectTypeReference;
 end;
@@ -757,6 +852,40 @@ begin
   exit lName;
 end;
 
+method Importer.ShouldUseCoreOpaqueType(aType: TypeReference): Boolean;
+begin
+  if not IsObjectRef(aType) then
+    exit false;
+
+  // The Core backend sometimes sees reference types that were never requested
+  // by the XML import file, but appear in public method signatures.  We only
+  // generate named opaque wrappers for compiler/model types where type identity
+  // matters for overload resolution.  Framework and support-library objects
+  // should stay as MZObject; otherwise the generated wrapper pollutes Fire's
+  // namespace with names such as Exception or EBuildObject and shadows the real
+  // types used by the app.
+  if aType.FullName.StartsWith("System.") then
+    exit false;
+  if aType.FullName.StartsWith("Microsoft.") then
+    exit false;
+  if aType.FullName.StartsWith("RemObjects.EBuild.") then
+    exit false;
+  if aType.FullName.StartsWith("RemObjects.CodeGen4.") then
+    exit false;
+
+  if aType.FullName.StartsWith("RemObjects.Elements.Code.") then
+    exit true;
+  if aType.FullName.StartsWith("RemObjects.Elements.Model.") then
+    exit true;
+  if aType.FullName.StartsWith("RemObjects.Elements.Refactoring.") then
+    exit true;
+  if aType.FullName.StartsWith("RemObjects.Elements.IDE.") then
+    exit true;
+  if aType.FullName.StartsWith("RemObjects.Elements.Debugger.") then
+    exit true;
+  exit false;
+end;
+
 method Importer.GenerateCoreMethod(aType: TypeDefinition; aMethod: MethodDefinition; aGeneratedMethod: CGMethodDefinition; aMethodField: CGFieldDefinition; aTypePropertyName: String);
 begin
   // The Mono backend builds the public method parameter list while assembling
@@ -817,6 +946,14 @@ begin
   lBlock.Statements.Add(new CGVariableDeclarationStatement('ex', new CGPointerTypeReference(CGPredefinedTypeReference.Void), new CGMethodCallExpression(new CGNamedIdentifierExpression('frame'), 'invoke')));
   lBlock.Statements.Add(new CGIfThenElseStatement(new CGAssignedExpression(new CGNamedIdentifierExpression('ex')),
                                                   new CGMethodCallExpression(nil, 'raiseException', [new CGCallParameter(new CGNamedIdentifierExpression('ex'))])));
+
+  for i: Integer := 0 to aMethod.Parameters.Count-1 do begin
+    var lParamType := aMethod.Parameters[i].ParameterType;
+    if lParamType.IsByReference then begin
+      lParamType := ByReferenceType(lParamType).ElementType;
+      AddCoreCopyBackArgument(lBlock, 'frame', i, '_'+aMethod.Parameters[i].Name, lParamType);
+    end;
+  end;
 
   if aMethod.IsConstructor then begin
     lBlock.Statements.Add(new CGAssignmentStatement(new CGNamedIdentifierExpression('__instance'), new CGMethodCallExpression(new CGNamedIdentifierExpression('frame'), 'getObjectResult')));
@@ -931,6 +1068,61 @@ begin
   aBlock.Statements.Add(new CGMethodCallExpression(lFrame, lMethodName, [new CGCallParameter(new CGIntegerLiteralExpression(aIndex)), new CGCallParameter(lValue, 'value')]));
 end;
 
+method Importer.AddCoreCopyBackArgument(aBlock: CGBeginEndBlockStatement; aFrameName: String; aIndex: Integer; aParameterName: String; aType: TypeReference);
+begin
+  var lFrame := new CGNamedIdentifierExpression(aFrameName);
+  var lTarget := new CGNamedIdentifierExpression(aParameterName);
+  var lPublicType := GetMarzipanType(aType);
+  var lValue: CGExpression := nil;
+
+  // Core invokes through a generic reflection call frame.  For byref/out
+  // parameters, the bridge copies the updated managed argument values back onto
+  // the frame after Invoke().  Generated wrappers therefore have to explicitly
+  // read those updated slots and assign them to their public Oxygene out/var
+  // parameters.  Without this, APIs such as CCListItemCollection.ToArray(out
+  // count, out defaultItem) return the array handle but leave count at zero.
+  case aType.FullName of
+    'System.String': begin
+      lValue := new CGMethodCallExpression(new CGNamedIdentifierExpression('MZString'),
+                                           'NSStringWithNetString',
+                                           [new CGCallParameter(new CGMethodCallExpression(lFrame, 'getArgumentString', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]))]);
+    end;
+    'System.Char',
+    'System.SByte',
+    'System.Byte',
+    'System.Int16',
+    'System.UInt16',
+    'System.Int32': begin
+      lValue := new CGTypeCastExpression(new CGMethodCallExpression(lFrame, 'getArgumentInt32', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]), lPublicType);
+    end;
+    else begin
+      var lArr: Boolean;
+      if IsListObjectRef(aType, out lArr) then begin
+        lValue := WrapListObject(new CGMethodCallExpression(lFrame, 'getArgumentObject', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]),
+                                 GetMarzipanType(if aType is GenericInstanceType then
+                                                   GenericInstanceType(aType).GenericArguments[0]
+                                                 else
+                                                   aType.GetElementType), lArr);
+      end
+      else if IsObjectRef(aType) then begin
+        lValue := WrapObject(new CGMethodCallExpression(lFrame, 'getArgumentObject', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]), lPublicType);
+      end
+      else if aType.Resolve.IsEnum then begin
+        var lEnumType := lPublicType;
+        case lPublicType type of
+          CGNamedTypeReference: begin
+            lEnumType := new CGNamedTypeReference(CGNamedTypeReference(lPublicType).Name) &namespace(fUnit.Namespace);
+          end;
+        end;
+        lValue := new CGTypeCastExpression(new CGMethodCallExpression(lFrame, 'getArgumentInt32', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]), lEnumType);
+      end;
+    end;
+  end;
+
+  if assigned(lValue) then
+    aBlock.Statements.Add(new CGAssignmentStatement(lTarget, lValue));
+end;
+
 method Importer.CoreResultExpression(aFrameName: String; aType: TypeReference; aPublicType: CGTypeReference): CGExpression;
 begin
   var lFrame := new CGNamedIdentifierExpression(aFrameName);
@@ -980,16 +1172,22 @@ method Importer.Resolve(name: AssemblyNameReference): AssemblyDefinition;
 begin
   var lTmp: ModuleDefinition;
   if fLoaded.TryGetValue(name.ToString, out lTmp) then exit lTmp.Assembly;
+
+  var lCandidates := new List<String>;
   for each el in fPaths do begin
     if File.Exists(Path.Combine(el, name.Name+'.dll')) then
-      exit LoadAsm(Path.Combine(el, name.Name+'.dll')).Assembly;
+      lCandidates.Add(Path.Combine(el, name.Name+'.dll'));
     if File.Exists(Path.Combine(el, name.Name+'.exe')) then
-      exit LoadAsm(Path.Combine(el, name.Name+'.exe')).Assembly;
+      lCandidates.Add(Path.Combine(el, name.Name+'.exe'));
     if File.Exists(Path.Combine(el, name.Name+'.DLL')) then
-      exit LoadAsm(Path.Combine(el, name.Name+'.DLL')).Assembly;
+      lCandidates.Add(Path.Combine(el, name.Name+'.DLL'));
     if File.Exists(Path.Combine(el, name.Name+'.EXE')) then
-      exit LoadAsm(Path.Combine(el, name.Name+'.EXE')).Assembly;
+      lCandidates.Add(Path.Combine(el, name.Name+'.EXE'));
   end;
+
+  if lCandidates.Count > 0 then
+    exit LoadAsm(lCandidates.OrderBy(a -> CandidateScore(a, name)).ThenByDescending(a -> a).First).Assembly;
+
   exit fResolver.Resolve(name);
 end;
 

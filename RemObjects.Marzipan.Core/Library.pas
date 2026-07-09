@@ -53,14 +53,17 @@ type
   private
     fNSArray: NSArray;
     fType: &Class;
-    class var fCountDelegate, fGetDelegate, fSetDelegate, fToNSArrayDelegate, fFromNSArrayDelegate, fFromStringArrayDelegate: ^Void;
+    class var fCountDelegate, fGetDelegate, fSetDelegate, fFromNSArrayDelegate, fFromStringArrayDelegate: ^Void;
+    //fToNSArrayDelegate: ^Void; // Cocoa NSArray snapshots are materialized on the native side.
     class var fFreeHandleDelegate: ^Void;
   public
     constructor withNetInstance(aInst: ^Void) elementType(aType: &Class);
     constructor withNSArray(aArray: NSArray);
     constructor withArray(aArray: array of String);
-    property &type: &Class read fType;
+    property &type: &Class read fType write fType;
     property count: NSUInteger read get_count;
+    property «Count»: NSUInteger read count;
+    property Length: NSUInteger read count;
     method objectAtIndex(aIndex: Integer): id;
     method objectAtIndexedSubscript(aIndex: Integer): id;
     method setObject(aObject: NSObject) atIndexedSubscript(aValue: Integer);
@@ -75,15 +78,17 @@ type
     // fArray: MZArray; // Reserved for potential cached materialization.
     fNSArray: NSArray;
     fType: &Class;
-    class var fCountDelegate, fGetDelegate, fClearDelegate, fToNSArrayDelegate, fFromNSArrayDelegate, fFromObjectDelegate: ^Void;
+    class var fCountDelegate, fGetDelegate, fClearDelegate, fFromNSArrayDelegate, fFromObjectDelegate: ^Void;
+    //fToNSArrayDelegate: ^Void; // Cocoa NSArray snapshots are materialized on the native side.
     class var fFreeHandleDelegate: ^Void;
   public
-    property &type: &Class read fType;
+    property &type: &Class read fType write fType;
     constructor withNSArray(aNSArray: NSArray);
     constructor withObject(aObject: id);
     constructor withNetInstance(aInst: ^Void) elementType(aType: &Class);
     method clear;
     property count: NSUInteger read get_count;
+    property «Count»: NSUInteger read count;
     method objectAtIndex(aIndex: Integer): id;
     method objectAtIndexedSubscript(aIndex: Integer): id;
     method countByEnumeratingWithState(state: ^NSFastEnumerationState) objects(buffer: ^id) count(len: NSUInteger): NSUInteger;
@@ -112,15 +117,16 @@ implementation
 
 constructor MZPinnedStringHolder withHandle(aHandle: ^Void) releaser(aReleaser: procedure(aHandle: ^Void));
 begin
+  self := inherited init;
   fHandle := aHandle;
   fReleaser := aReleaser;
+  result := self;
 end;
 
 method MZPinnedStringHolder.dealloc;
 begin
   if (fHandle <> nil) and assigned(fReleaser) then
     fReleaser(fHandle);
-  inherited dealloc;
 end;
 
 { MZString }
@@ -296,11 +302,23 @@ end;
 method MZArray.NSArray: NSArray;
 begin
   if fNSArray = nil then begin
-    if fToNSArrayDelegate = nil then
-      fToNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ArrayHelpers", "ToNSArray");
-    var lFunc: function(aArray: ^Void): id;
-    ^^Void(@lFunc)^ := fToNSArrayDelegate;
-    fNSArray := Foundation.NSArray(lFunc(self.__instance));
+    // CoreCLR cannot manufacture Cocoa/Foundation objects for us. Keep the
+    // .NET bridge focused on managed list/array access, and materialize the
+    // Cocoa NSArray here on the native side only when a Cocoa caller explicitly
+    // asks for NSArray/fast enumeration. Direct Count/indexed access remains
+    // lazy and uses GetCount/GetElement.
+    var lCount := Int32(count);
+    var lResult := NSMutableArray.arrayWithCapacity(lCount);
+    if lCount = 0 then begin
+      fNSArray := lResult;
+      exit fNSArray;
+    end;
+    for i: Int32 := 0 to lCount-1 do begin
+      var lItem := objectAtIndex(i);
+      if assigned(lItem) then
+        lResult.addObject(lItem);
+    end;
+    fNSArray := lResult;
   end;
   result := fNSArray;
 end;
@@ -406,11 +424,22 @@ end;
 method MZObjectList.NSArray: NSArray;
 begin
   if fNSArray = nil then begin
-    if fToNSArrayDelegate = nil then
-      fToNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ListHelpers", "ToNSArray");
-    var lFunc: function(aList: ^Void): id;
-    ^^Void(@lFunc)^ := fToNSArrayDelegate;
-    fNSArray := Foundation.NSArray(lFunc(self.__instance));
+    // Same rule as MZArray.NSArray: Cocoa objects are created on the Cocoa side.
+    // This also avoids requiring CoreCLR to know about Foundation/Objective-C
+    // and keeps normal list consumption lazy until an actual NSArray snapshot is
+    // needed for fast enumeration or APIs that demand NSArray.
+    var lCount := Int32(count);
+    var lResult := NSMutableArray.arrayWithCapacity(lCount);
+    if lCount = 0 then begin
+      fNSArray := lResult;
+      exit fNSArray;
+    end;
+    for i: Int32 := 0 to lCount-1 do begin
+      var lItem := objectAtIndex(i);
+      if assigned(lItem) then
+        lResult.addObject(lItem);
+    end;
+    fNSArray := lResult;
   end;
   result := fNSArray;
 end;

@@ -123,6 +123,7 @@ type
     class var fCreateDelegate, fFreeDelegate, fInvokeDelegate: ^Void;
     class var fSetObjectDelegate, fSetStringDelegate, fSetBooleanDelegate, fSetI4Delegate, fSetU4Delegate, fSetI8Delegate, fSetU8Delegate, fSetR4Delegate, fSetR8Delegate, fSetIntPtrDelegate, fSetDateTimeDelegate: ^Void;
     class var fGetObjectDelegate, fGetStringDelegate, fGetBooleanDelegate, fGetI4Delegate, fGetU4Delegate, fGetI8Delegate, fGetU8Delegate, fGetR4Delegate, fGetR8Delegate, fGetIntPtrDelegate, fGetDateTimeDelegate: ^Void;
+    class var fGetArgumentObjectDelegate, fGetArgumentStringDelegate, fGetArgumentI4Delegate: ^Void;
   public
     constructor withMethod(aMethod: MZMethod) target(aTarget: ^Void) argumentCount(aArgumentCount: Integer);
     property handle: ^Void read fHandle;
@@ -140,6 +141,10 @@ type
     method setDateTime(aIndex: Integer) value(aValue: MZDateTime);
 
     method invoke: ^Void;
+    method getArgumentObject(aIndex: Integer): ^Void;
+    method getArgumentString(aIndex: Integer): ^Void;
+    method getArgumentInt32(aIndex: Integer): Int32;
+
     method getObjectResult: ^Void;
     method getStringResult: ^Void;
     method getBooleanResult: Boolean;
@@ -181,6 +186,50 @@ type
     method &equals(aOther: MZObject): Boolean;
     method description: NSString; override;
     finalizer;
+  end;
+
+  MZCoreHelpers = public class
+  private
+    class var fForceGarbageCollectionDelegate: ^Void;
+  public
+    class method forceGarbageCollection: NSString;
+  end;
+
+  MZDebugVoidCallback = public procedure(aUserData: ^Void);
+  MZDebugIntCallback = public procedure(aUserData: ^Void; aValue: Integer);
+  MZDebugObjectCallback = public procedure(aUserData: ^Void; aValue: ^Void);
+  MZDebugStringCallback = public procedure(aUserData: ^Void; aValue: ^Void);
+  MZDebugTwoStringCallback = public procedure(aUserData: ^Void; aFirst: ^Void; aSecond: ^Void);
+  MZDebugObjectStringCallback = public procedure(aUserData: ^Void; aFirst: ^Void; aSecond: ^Void);
+  MZDebugTwoObjectCallback = public procedure(aUserData: ^Void; aFirst: ^Void; aSecond: ^Void);
+  MZDebugRemoteFileNeededCallback = public function(aUserData: ^Void; aRemoteFileName: ^Void): ^Void;
+  MZDebugBreakExceptionCallback = public procedure(aUserData: ^Void; aThread: ^Void; aFatal: Byte; aType: ^Void; aMessage: ^Void);
+  MZDebugProgressCallback = public procedure(aUserData: ^Void; aPercentage: Integer; aMessage: ^Void);
+
+  MZCoreDebugEngineCallbacks = public class
+  private
+    class var fAttachCallbacksDelegate: ^Void;
+  public
+    class method attach(aDebugEngine: ^Void) userData(aUserData: ^Void)
+      debugProgress(aDebugProgress: MZDebugProgressCallback)
+      threadStarted(aThreadStarted: MZDebugObjectCallback)
+      threadFinished(aThreadFinished: MZDebugObjectCallback)
+      threadRenamed(aThreadRenamed: MZDebugObjectCallback)
+      processTerminated(aProcessTerminated: MZDebugIntCallback)
+      processStarted(aProcessStarted: MZDebugVoidCallback)
+      processReady(aProcessReady: MZDebugVoidCallback)
+      processFailedToStart(aProcessFailedToStart: MZDebugStringCallback)
+      log(aLog: MZDebugTwoStringCallback)
+      stdOut(aSTDOut: MZDebugStringCallback)
+      stdErr(aSTDErr: MZDebugStringCallback)
+      breakStop(aBreakStop: MZDebugTwoObjectCallback)
+      breakpointResolved(aBreakpointResolved: MZDebugObjectCallback)
+      breakpointSignal(aBreakpointSignal: MZDebugObjectStringCallback)
+      remoteFileNeeded(aRemoteFileNeeded: MZDebugRemoteFileNeededCallback)
+      breakException(aBreakException: MZDebugBreakExceptionCallback)
+      disposed(aDisposed: MZDebugVoidCallback)
+      moduleLoad(aModuleLoad: MZDebugObjectCallback)
+      moduleUnload(aModuleUnload: MZDebugObjectCallback): ^Void;
   end;
 
   hostfxr_delegate_type = public enum
@@ -690,9 +739,13 @@ end;
 method MZCallFrame.setBoolean(aIndex: Integer) value(aValue: Boolean);
 begin
   if fSetBooleanDelegate = nil then fSetBooleanDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "SetBoolean");
-  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: Boolean);
+  // UnmanagedCallersOnly entry points must use blittable argument/result types.
+  // C# bool is not blittable, and CoreCLR can fail in the unmanaged-call prestub
+  // before the managed bridge body runs. Keep the bridge ABI byte-sized and turn
+  // native booleans into an explicit 0/1 payload.
+  var lFunc: procedure(aFrame: ^Void; aIndex: Integer; aValue: Byte);
   ^^Void(@lFunc)^ := fSetBooleanDelegate;
-  lFunc(fHandle, aIndex, aValue);
+  lFunc(fHandle, aIndex, if aValue then 1 else 0);
 end;
 
 method MZCallFrame.setInt32(aIndex: Integer) value(aValue: Int32);
@@ -767,6 +820,30 @@ begin
   exit lFunc(fHandle);
 end;
 
+method MZCallFrame.getArgumentObject(aIndex: Integer): ^Void;
+begin
+  if fGetArgumentObjectDelegate = nil then fGetArgumentObjectDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentObject");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): ^Void;
+  ^^Void(@lFunc)^ := fGetArgumentObjectDelegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentString(aIndex: Integer): ^Void;
+begin
+  if fGetArgumentStringDelegate = nil then fGetArgumentStringDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentString");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): ^Void;
+  ^^Void(@lFunc)^ := fGetArgumentStringDelegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentInt32(aIndex: Integer): Int32;
+begin
+  if fGetArgumentI4Delegate = nil then fGetArgumentI4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentI4");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): Int32;
+  ^^Void(@lFunc)^ := fGetArgumentI4Delegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
 method MZCallFrame.getObjectResult: ^Void;
 begin
   if fGetObjectDelegate = nil then fGetObjectDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultObject");
@@ -786,9 +863,11 @@ end;
 method MZCallFrame.getBooleanResult: Boolean;
 begin
   if fGetBooleanDelegate = nil then fGetBooleanDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetResultBoolean");
-  var lFunc: function(aFrame: ^Void): Boolean;
+  // See setBoolean: expose booleans across the unmanaged bridge as byte-sized
+  // 0/1 values so the CoreCLR callback signature remains blittable.
+  var lFunc: function(aFrame: ^Void): Byte;
   ^^Void(@lFunc)^ := fGetBooleanDelegate;
-  exit lFunc(fHandle);
+  exit lFunc(fHandle) <> 0;
 end;
 
 method MZCallFrame.getInt32Result: Int32;
@@ -880,7 +959,9 @@ constructor MZObject withNetInstance(aInstance: ^Void);
 begin
   if not assigned(aInstance) then
     exit nil;
+  self := inherited init;
   setInstance(aInstance);
+  result := self;
 end;
 
 finalizer MZObject;
@@ -922,9 +1003,11 @@ method MZObject.&equals(aOther: MZObject): Boolean;
 begin
   if fEqualsDelegate = nil then
     fEqualsDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "Equals");
-  var lFunc: function(aInstance: ^Void; aOther: ^Void): Boolean;
+  // Keep the unmanaged callback signature blittable; the managed bridge returns
+  // byte-sized 0/1 instead of C# bool.
+  var lFunc: function(aInstance: ^Void; aOther: ^Void): Byte;
   ^^Void(@lFunc)^ := fEqualsDelegate;
-  exit lFunc(self.__instance, if aOther = nil then nil else aOther.__instance);
+  exit lFunc(self.__instance, if aOther = nil then nil else aOther.__instance) <> 0;
 end;
 
 class method MZObject.raiseException(aEx: ^Void);
@@ -974,6 +1057,116 @@ method MZObject.toType(aType: &Class): id;
 begin
   if self.isKindOfClass(aType) then exit self;
   exit aType.alloc.initWithNetInstance(__instance);
+end;
+
+class method MZCoreHelpers.forceGarbageCollection: NSString;
+begin
+  if fForceGarbageCollectionDelegate = nil then
+    fForceGarbageCollectionDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ForceGarbageCollection");
+
+  var lFunc: function: ^Void;
+  ^^Void(@lFunc)^ := fForceGarbageCollectionDelegate;
+
+  var lResult := lFunc();
+  try
+    result := MZString.NSStringWithNetString(lResult);
+  finally
+    MZObject.freeHandle(lResult);
+  end;
+end;
+
+class method MZCoreDebugEngineCallbacks.attach(aDebugEngine: ^Void) userData(aUserData: ^Void)
+  debugProgress(aDebugProgress: MZDebugProgressCallback)
+  threadStarted(aThreadStarted: MZDebugObjectCallback)
+  threadFinished(aThreadFinished: MZDebugObjectCallback)
+  threadRenamed(aThreadRenamed: MZDebugObjectCallback)
+  processTerminated(aProcessTerminated: MZDebugIntCallback)
+  processStarted(aProcessStarted: MZDebugVoidCallback)
+  processReady(aProcessReady: MZDebugVoidCallback)
+  processFailedToStart(aProcessFailedToStart: MZDebugStringCallback)
+  log(aLog: MZDebugTwoStringCallback)
+  stdOut(aSTDOut: MZDebugStringCallback)
+  stdErr(aSTDErr: MZDebugStringCallback)
+  breakStop(aBreakStop: MZDebugTwoObjectCallback)
+  breakpointResolved(aBreakpointResolved: MZDebugObjectCallback)
+  breakpointSignal(aBreakpointSignal: MZDebugObjectStringCallback)
+  remoteFileNeeded(aRemoteFileNeeded: MZDebugRemoteFileNeededCallback)
+  breakException(aBreakException: MZDebugBreakExceptionCallback)
+  disposed(aDisposed: MZDebugVoidCallback)
+  moduleLoad(aModuleLoad: MZDebugObjectCallback)
+  moduleUnload(aModuleUnload: MZDebugObjectCallback): ^Void;
+begin
+  if fAttachCallbacksDelegate = nil then
+    fAttachCallbacksDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.DebugEngineCallbackHelpers", "AttachCallbacks");
+
+  var lFunc: function(aDebugEngine: ^Void; aUserData: ^Void;
+                      aDebugProgress: ^Void;
+                      aThreadStarted: ^Void;
+                      aThreadFinished: ^Void;
+                      aThreadRenamed: ^Void;
+                      aProcessTerminated: ^Void;
+                      aProcessStarted: ^Void;
+                      aProcessReady: ^Void;
+                      aProcessFailedToStart: ^Void;
+                      aLog: ^Void;
+                      aSTDOut: ^Void;
+                      aSTDErr: ^Void;
+                      aBreakStop: ^Void;
+                      aBreakpointResolved: ^Void;
+                      aBreakpointSignal: ^Void;
+                      aRemoteFileNeeded: ^Void;
+                      aBreakException: ^Void;
+                      aDisposed: ^Void;
+                      aModuleLoad: ^Void;
+                      aModuleUnload: ^Void): ^Void;
+  ^^Void(@lFunc)^ := fAttachCallbacksDelegate;
+
+  // Procedural variables are stored as native function pointers.  Do not pass
+  // @aDebugProgress (or any sibling) to managed code: that is the address of
+  // this stack slot, not the executable callback.  CoreCLR will later invoke
+  // these callbacks from thread-pool/debugger threads, so a stack-slot address
+  // turns into an EXC_BAD_ACCESS jump into another thread's stack.  Dereference
+  // the procedural variable storage once and pass the actual entry point.
+  var lDebugProgress: ^Void := ^^Void(@aDebugProgress)^;
+  var lThreadStarted: ^Void := ^^Void(@aThreadStarted)^;
+  var lThreadFinished: ^Void := ^^Void(@aThreadFinished)^;
+  var lThreadRenamed: ^Void := ^^Void(@aThreadRenamed)^;
+  var lProcessTerminated: ^Void := ^^Void(@aProcessTerminated)^;
+  var lProcessStarted: ^Void := ^^Void(@aProcessStarted)^;
+  var lProcessReady: ^Void := ^^Void(@aProcessReady)^;
+  var lProcessFailedToStart: ^Void := ^^Void(@aProcessFailedToStart)^;
+  var lLog: ^Void := ^^Void(@aLog)^;
+  var lSTDOut: ^Void := ^^Void(@aSTDOut)^;
+  var lSTDErr: ^Void := ^^Void(@aSTDErr)^;
+  var lBreakStop: ^Void := ^^Void(@aBreakStop)^;
+  var lBreakpointResolved: ^Void := ^^Void(@aBreakpointResolved)^;
+  var lBreakpointSignal: ^Void := ^^Void(@aBreakpointSignal)^;
+  var lRemoteFileNeeded: ^Void := ^^Void(@aRemoteFileNeeded)^;
+  var lBreakException: ^Void := ^^Void(@aBreakException)^;
+  var lDisposed: ^Void := ^^Void(@aDisposed)^;
+  var lModuleLoad: ^Void := ^^Void(@aModuleLoad)^;
+  var lModuleUnload: ^Void := ^^Void(@aModuleUnload)^;
+
+  exit lFunc(aDebugEngine, aUserData,
+             lDebugProgress,
+             lThreadStarted,
+             lThreadFinished,
+             lThreadRenamed,
+             lProcessTerminated,
+             lProcessStarted,
+             lProcessReady,
+             lProcessFailedToStart,
+             lLog,
+             lSTDOut,
+             lSTDErr,
+             lBreakStop,
+             lBreakpointResolved,
+             lBreakpointSignal,
+             lRemoteFileNeeded,
+             lBreakException,
+             lDisposed,
+             lModuleLoad,
+             lModuleUnload);
 end;
 
 end.
