@@ -43,7 +43,7 @@
     <Reference Include="System.Collections" />
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Bridge.cs" />
+    <Compile Include="Bridge.pas" />
   </ItemGroup>
   <Import Project="$(MSBuildExtensionsPath)\RemObjects Software\Elements\RemObjects.Elements.Echoes.targets" />
 </Project>

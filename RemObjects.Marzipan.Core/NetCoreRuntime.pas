@@ -123,7 +123,7 @@ type
     class var fCreateDelegate, fFreeDelegate, fInvokeDelegate: ^Void;
     class var fSetObjectDelegate, fSetStringDelegate, fSetBooleanDelegate, fSetI4Delegate, fSetU4Delegate, fSetI8Delegate, fSetU8Delegate, fSetR4Delegate, fSetR8Delegate, fSetIntPtrDelegate, fSetDateTimeDelegate: ^Void;
     class var fGetObjectDelegate, fGetStringDelegate, fGetBooleanDelegate, fGetI4Delegate, fGetU4Delegate, fGetI8Delegate, fGetU8Delegate, fGetR4Delegate, fGetR8Delegate, fGetIntPtrDelegate, fGetDateTimeDelegate: ^Void;
-    class var fGetArgumentObjectDelegate, fGetArgumentStringDelegate, fGetArgumentI4Delegate: ^Void;
+    class var fGetArgumentObjectDelegate, fGetArgumentStringDelegate, fGetArgumentBooleanDelegate, fGetArgumentI4Delegate, fGetArgumentU4Delegate, fGetArgumentI8Delegate, fGetArgumentU8Delegate, fGetArgumentR4Delegate, fGetArgumentR8Delegate, fGetArgumentIntPtrDelegate, fGetArgumentDateTimeDelegate: ^Void;
   public
     constructor withMethod(aMethod: MZMethod) target(aTarget: ^Void) argumentCount(aArgumentCount: Integer);
     property handle: ^Void read fHandle;
@@ -143,7 +143,15 @@ type
     method invoke: ^Void;
     method getArgumentObject(aIndex: Integer): ^Void;
     method getArgumentString(aIndex: Integer): ^Void;
+    method getArgumentBoolean(aIndex: Integer): Boolean;
     method getArgumentInt32(aIndex: Integer): Int32;
+    method getArgumentUInt32(aIndex: Integer): UInt32;
+    method getArgumentInt64(aIndex: Integer): Int64;
+    method getArgumentUInt64(aIndex: Integer): UInt64;
+    method getArgumentSingle(aIndex: Integer): Single;
+    method getArgumentDouble(aIndex: Integer): Double;
+    method getArgumentIntPtr(aIndex: Integer): intptr_t;
+    method getArgumentDateTime(aIndex: Integer): MZDateTime;
 
     method getObjectResult: ^Void;
     method getStringResult: ^Void;
@@ -836,11 +844,75 @@ begin
   exit lFunc(fHandle, aIndex);
 end;
 
+method MZCallFrame.getArgumentBoolean(aIndex: Integer): Boolean;
+begin
+  if fGetArgumentBooleanDelegate = nil then fGetArgumentBooleanDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentBoolean");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): Byte;
+  ^^Void(@lFunc)^ := fGetArgumentBooleanDelegate;
+  exit lFunc(fHandle, aIndex) <> 0;
+end;
+
 method MZCallFrame.getArgumentInt32(aIndex: Integer): Int32;
 begin
   if fGetArgumentI4Delegate = nil then fGetArgumentI4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentI4");
   var lFunc: function(aFrame: ^Void; aIndex: Integer): Int32;
   ^^Void(@lFunc)^ := fGetArgumentI4Delegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentUInt32(aIndex: Integer): UInt32;
+begin
+  if fGetArgumentU4Delegate = nil then fGetArgumentU4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentU4");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): UInt32;
+  ^^Void(@lFunc)^ := fGetArgumentU4Delegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentInt64(aIndex: Integer): Int64;
+begin
+  if fGetArgumentI8Delegate = nil then fGetArgumentI8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentI8");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): Int64;
+  ^^Void(@lFunc)^ := fGetArgumentI8Delegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentUInt64(aIndex: Integer): UInt64;
+begin
+  if fGetArgumentU8Delegate = nil then fGetArgumentU8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentU8");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): UInt64;
+  ^^Void(@lFunc)^ := fGetArgumentU8Delegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentSingle(aIndex: Integer): Single;
+begin
+  if fGetArgumentR4Delegate = nil then fGetArgumentR4Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentR4");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): Single;
+  ^^Void(@lFunc)^ := fGetArgumentR4Delegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentDouble(aIndex: Integer): Double;
+begin
+  if fGetArgumentR8Delegate = nil then fGetArgumentR8Delegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentR8");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): Double;
+  ^^Void(@lFunc)^ := fGetArgumentR8Delegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentIntPtr(aIndex: Integer): intptr_t;
+begin
+  if fGetArgumentIntPtrDelegate = nil then fGetArgumentIntPtrDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentIntPtr");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): intptr_t;
+  ^^Void(@lFunc)^ := fGetArgumentIntPtrDelegate;
+  exit lFunc(fHandle, aIndex);
+end;
+
+method MZCallFrame.getArgumentDateTime(aIndex: Integer): MZDateTime;
+begin
+  if fGetArgumentDateTimeDelegate = nil then fGetArgumentDateTimeDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.CallFrameHelpers", "GetArgumentDateTime");
+  var lFunc: function(aFrame: ^Void; aIndex: Integer): MZDateTime;
+  ^^Void(@lFunc)^ := fGetArgumentDateTimeDelegate;
   exit lFunc(fHandle, aIndex);
 end;
 

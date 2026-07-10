@@ -53,7 +53,8 @@ type
   private
     fNSArray: NSArray;
     fType: &Class;
-    class var fCountDelegate, fGetDelegate, fSetDelegate, fFromNSArrayDelegate, fFromStringArrayDelegate: ^Void;
+    class var fCountDelegate, fGetDelegate, fSetDelegate, fFromObjectArrayDelegate, fFromStringArrayDelegate: ^Void;
+    //fFromNSArrayDelegate: ^Void; // NSArray is enumerated on the Cocoa side; the bridge stays Foundation-free.
     //fToNSArrayDelegate: ^Void; // Cocoa NSArray snapshots are materialized on the native side.
     class var fFreeHandleDelegate: ^Void;
   public
@@ -231,11 +232,36 @@ end;
 
 constructor MZArray withNSArray(aArray: NSArray);
 begin
-  if fFromNSArrayDelegate = nil then
-    fFromNSArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ArrayHelpers", "FromNSArray");
-  var lFunc: function(aNSArray: id): ^Void;
-  ^^Void(@lFunc)^ := fFromNSArrayDelegate;
-  var lNetArray := lFunc(aArray);
+  if fFromObjectArrayDelegate = nil then
+    fFromObjectArrayDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ArrayHelpers", "FromObjectArray");
+  var lFunc: function(aObjects: ^^Void; aCount: Integer): ^Void;
+  ^^Void(@lFunc)^ := fFromObjectArrayDelegate;
+
+  // The managed bridge intentionally has no Cocoa/Foundation dependency, so it
+  // cannot enumerate NSArray itself.  Walk the Cocoa array here and pass the
+  // managed object handles across as a plain pointer array.  Existing MZObject
+  // instances keep ownership of their handles; temporary string handles are
+  // freed immediately after the bridge has copied their managed targets.
+  var lCount := Integer(aArray.count);
+  var lPtrs := new ^Void[lCount];
+  var lTemporary := new Boolean[lCount];
+  for i: Integer := 0 to lCount - 1 do begin
+    var lObject := aArray.objectAtIndex(i);
+    if lObject is NSString then begin
+      lPtrs[i] := MZString.NetStringWithNSString(NSString(lObject));
+      lTemporary[i] := true;
+    end
+    else if lObject is MZObject then
+      lPtrs[i] := MZObject(lObject).__instance
+    else
+      lPtrs[i] := nil;
+  end;
+
+  var lNetArray := lFunc(if lCount = 0 then nil else @lPtrs[0], lCount);
+  for i: Integer := 0 to lCount - 1 do
+    if lTemporary[i] and (lPtrs[i] <> nil) then
+      MZObject.freeHandle(lPtrs[i]);
+
   self := inherited initWithNetInstance(lNetArray);
   fType := typeOf(MZObject); // or infer from array contents
   result := self;
@@ -250,7 +276,10 @@ begin
   for i: Integer := 0 to aArray.length-1 do
     lPtrs[i] := MZString.NetStringWithNSString(aArray[i]);
   ^^Void(@lFunc)^ := fFromStringArrayDelegate;
-  var lNetArray := lFunc(@lPtrs[0], aArray.length);
+  var lNetArray := lFunc(if aArray.length = 0 then nil else @lPtrs[0], aArray.length);
+  for i: Integer := 0 to aArray.length-1 do
+    if lPtrs[i] <> nil then
+      MZObject.freeHandle(lPtrs[i]);
   self := inherited initWithNetInstance(lNetArray);
   fType := typeOf(NSString);
   result := self;

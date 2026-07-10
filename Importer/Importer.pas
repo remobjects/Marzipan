@@ -944,9 +944,6 @@ begin
   end;
 
   lBlock.Statements.Add(new CGVariableDeclarationStatement('ex', new CGPointerTypeReference(CGPredefinedTypeReference.Void), new CGMethodCallExpression(new CGNamedIdentifierExpression('frame'), 'invoke')));
-  lBlock.Statements.Add(new CGIfThenElseStatement(new CGAssignedExpression(new CGNamedIdentifierExpression('ex')),
-                                                  new CGMethodCallExpression(nil, 'raiseException', [new CGCallParameter(new CGNamedIdentifierExpression('ex'))])));
-
   for i: Integer := 0 to aMethod.Parameters.Count-1 do begin
     var lParamType := aMethod.Parameters[i].ParameterType;
     if lParamType.IsByReference then begin
@@ -954,6 +951,8 @@ begin
       AddCoreCopyBackArgument(lBlock, 'frame', i, '_'+aMethod.Parameters[i].Name, lParamType);
     end;
   end;
+  lBlock.Statements.Add(new CGIfThenElseStatement(new CGAssignedExpression(new CGNamedIdentifierExpression('ex')),
+                                                  new CGMethodCallExpression(nil, 'raiseException', [new CGCallParameter(new CGNamedIdentifierExpression('ex'))])));
 
   if aMethod.IsConstructor then begin
     lBlock.Statements.Add(new CGAssignmentStatement(new CGNamedIdentifierExpression('__instance'), new CGMethodCallExpression(new CGNamedIdentifierExpression('frame'), 'getObjectResult')));
@@ -962,12 +961,22 @@ begin
   else if aMethod.ReturnType.FullName <> 'System.Void' then begin
     var lArr: Boolean;
     var lPublicType := GetMarzipanType(aMethod.ReturnType);
-    if IsListObjectRef(aMethod.ReturnType, out lArr) then
-      lBlock.Statements.Add(new CGReturnStatement(WrapListObject(new CGMethodCallExpression(new CGNamedIdentifierExpression('frame'), 'getObjectResult'),
+    if IsListObjectRef(aMethod.ReturnType, out lArr) then begin
+      lBlock.Statements.Add(new CGVariableDeclarationStatement('res', new CGPointerTypeReference(CGPredefinedTypeReference.Void), new CGMethodCallExpression(new CGNamedIdentifierExpression('frame'), 'getObjectResult')));
+      lBlock.Statements.Add(new CGReturnStatement(WrapListObject(new CGNamedIdentifierExpression('res'),
                                                         GetMarzipanType(if aMethod.ReturnType is GenericInstanceType then
                                                                           GenericInstanceType(aMethod.ReturnType).GenericArguments[0]
                                                                         else
-                                                                          aMethod.ReturnType.GetElementType), lArr)))
+                                                                          aMethod.ReturnType.GetElementType), lArr)));
+    end
+    else if (aMethod.ReturnType.FullName <> 'System.String') and IsObjectRef(aMethod.ReturnType) then begin
+      // Object/list result helpers return a newly allocated bridge handle.  Keep
+      // it in a local before building the nil-checking wrapper expression, so
+      // generated code does not ask the bridge for the same handle twice and
+      // leak the first one.
+      lBlock.Statements.Add(new CGVariableDeclarationStatement('res', new CGPointerTypeReference(CGPredefinedTypeReference.Void), new CGMethodCallExpression(new CGNamedIdentifierExpression('frame'), 'getObjectResult')));
+      lBlock.Statements.Add(new CGReturnStatement(WrapObject(new CGNamedIdentifierExpression('res'), lPublicType)));
+    end
     else
       lBlock.Statements.Add(new CGReturnStatement(CoreResultExpression('frame', aMethod.ReturnType, lPublicType)));
   end;
@@ -1095,17 +1104,50 @@ begin
     'System.Int32': begin
       lValue := new CGTypeCastExpression(new CGMethodCallExpression(lFrame, 'getArgumentInt32', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]), lPublicType);
     end;
+    'System.UInt32': begin
+      lValue := new CGMethodCallExpression(lFrame, 'getArgumentUInt32', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]);
+    end;
+    'System.Int64': begin
+      lValue := new CGMethodCallExpression(lFrame, 'getArgumentInt64', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]);
+    end;
+    'System.UInt64': begin
+      lValue := new CGMethodCallExpression(lFrame, 'getArgumentUInt64', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]);
+    end;
+    'System.Single': begin
+      lValue := new CGMethodCallExpression(lFrame, 'getArgumentSingle', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]);
+    end;
+    'System.Double': begin
+      lValue := new CGMethodCallExpression(lFrame, 'getArgumentDouble', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]);
+    end;
+    'System.Boolean': begin
+      lValue := new CGMethodCallExpression(lFrame, 'getArgumentBoolean', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]);
+    end;
+    'System.DateTime': begin
+      lValue := new CGMethodCallExpression(lFrame, 'getArgumentDateTime', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]);
+    end;
+    'System.IntPtr',
+    'System.UIntPtr': begin
+      lValue := new CGTypeCastExpression(new CGMethodCallExpression(lFrame, 'getArgumentIntPtr', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]), lPublicType);
+    end;
     else begin
       var lArr: Boolean;
       if IsListObjectRef(aType, out lArr) then begin
-        lValue := WrapListObject(new CGMethodCallExpression(lFrame, 'getArgumentObject', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]),
+        var lHandleName := 'par'+aIndex.ToString();
+        aBlock.Statements.Add(new CGVariableDeclarationStatement(lHandleName,
+                                                                 new CGPointerTypeReference(CGPredefinedTypeReference.Void),
+                                                                 new CGMethodCallExpression(lFrame, 'getArgumentObject', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))])));
+        lValue := WrapListObject(new CGNamedIdentifierExpression(lHandleName),
                                  GetMarzipanType(if aType is GenericInstanceType then
                                                    GenericInstanceType(aType).GenericArguments[0]
                                                  else
                                                    aType.GetElementType), lArr);
       end
       else if IsObjectRef(aType) then begin
-        lValue := WrapObject(new CGMethodCallExpression(lFrame, 'getArgumentObject', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))]), lPublicType);
+        var lHandleName := 'par'+aIndex.ToString();
+        aBlock.Statements.Add(new CGVariableDeclarationStatement(lHandleName,
+                                                                 new CGPointerTypeReference(CGPredefinedTypeReference.Void),
+                                                                 new CGMethodCallExpression(lFrame, 'getArgumentObject', [new CGCallParameter(new CGIntegerLiteralExpression(aIndex))])));
+        lValue := WrapObject(new CGNamedIdentifierExpression(lHandleName), lPublicType);
       end
       else if aType.Resolve.IsEnum then begin
         var lEnumType := lPublicType;
