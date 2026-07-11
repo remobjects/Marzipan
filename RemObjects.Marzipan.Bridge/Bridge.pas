@@ -60,6 +60,7 @@ type
 
     class constructor;
     class method CacheLoadedAssembly(aFullPath: String; aAssembly: System.Reflection.&Assembly): System.Reflection.&Assembly;
+    class method AlreadyLoadedAssembly(aName: AssemblyName): System.Reflection.&Assembly;
     class method RegisterAssemblySearchPath(aPath: String);
     class method ResolveAssemblyFromRegisteredPaths(aContext: AssemblyLoadContext; aName: AssemblyName): System.Reflection.&Assembly;
     class method ResolveTrustedPlatformAssembly(aName: AssemblyName): String;
@@ -96,6 +97,18 @@ type
     [UnmanagedCallersOnly(EntryPoint := 'MZ_Object_ExceptionToString')]
     class method ExceptionToString(aException: IntPtr): IntPtr;
 
+    [UnmanagedCallersOnly(EntryPoint := 'MZ_Object_ExceptionType')]
+    class method ExceptionType(aException: IntPtr): IntPtr;
+
+    [UnmanagedCallersOnly(EntryPoint := 'MZ_Object_ExceptionMessage')]
+    class method ExceptionMessage(aException: IntPtr): IntPtr;
+
+    [UnmanagedCallersOnly(EntryPoint := 'MZ_Object_ExceptionStackTrace')]
+    class method ExceptionStackTrace(aException: IntPtr): IntPtr;
+
+    [UnmanagedCallersOnly(EntryPoint := 'MZ_Object_IsException')]
+    class method IsException(aValue: IntPtr): Byte;
+
     [UnmanagedCallersOnly(EntryPoint := 'MZ_Object_ForceGarbageCollection')]
     class method ForceGarbageCollection: IntPtr;
   end;
@@ -110,6 +123,15 @@ type
 
     [UnmanagedCallersOnly(EntryPoint := 'MZ_Runtime_LoadAssembly')]
     class method LoadAssembly(aPathChars: IntPtr; aPathLength: Integer): IntPtr;
+  end;
+
+  TestHelpers = public static class
+  public
+    // Tiny managed methods for native smoke tests. They go through the same
+    // reflection/call-frame machinery as real imported APIs, but keep Fire and
+    // compiler state out of exception-propagation tests.
+    class method ThrowArgumentException;
+    class method ThrowNullReferenceException;
   end;
 
   StringHelpers = public static class
@@ -454,6 +476,11 @@ begin
       exit lExisting;
 
     RegisterAssemblySearchPath(Path.GetDirectoryName(lFullPath));
+    var lRequestedName := AssemblyName.GetAssemblyName(lFullPath);
+    var lAlreadyLoaded := AlreadyLoadedAssembly(lRequestedName);
+    if assigned(lAlreadyLoaded) then
+      exit CacheLoadedAssembly(lFullPath, lAlreadyLoaded);
+
     var lAssembly := AssemblyLoadContext.Default.LoadFromAssemblyPath(lFullPath);
     fAssembliesByPath[lFullPath] := lAssembly;
     fAssembliesByName[coalesce(lAssembly.GetName().Name, Path.GetFileNameWithoutExtension(lFullPath))] := lAssembly;
@@ -466,6 +493,36 @@ begin
   fAssembliesByPath[aFullPath] := aAssembly;
   fAssembliesByName[coalesce(aAssembly.GetName().Name, Path.GetFileNameWithoutExtension(aFullPath))] := aAssembly;
   result := aAssembly;
+end;
+
+class method RuntimeState.AlreadyLoadedAssembly(aName: AssemblyName): System.Reflection.&Assembly;
+begin
+  var lSimpleName := aName:Name;
+  if String.IsNullOrWhiteSpace(lSimpleName) then
+    exit nil;
+
+  locking fAssembliesByName do begin
+    var lCached: System.Reflection.&Assembly;
+    if fAssembliesByName.TryGetValue(lSimpleName, out lCached) then
+      exit lCached;
+  end;
+
+  for each lLoadedAssembly in AppDomain.CurrentDomain.GetAssemblies() do begin
+    var lLoadedName := lLoadedAssembly.GetName();
+    if String.Equals(lLoadedName.Name, lSimpleName, StringComparison.OrdinalIgnoreCase) then begin
+      // CoreCLR's default AssemblyLoadContext can only bind one assembly for a
+      // given simple name. Some optional plugin payloads (for example ROFX/DA)
+      // may carry their own Elements.dll built at a different version than the
+      // compiler already loaded. In the old Mono bridge this naturally unified
+      // to the active runtime assembly; do the same here instead of failing the
+      // explicit LoadAssembly(path) call with "assembly with same name is already
+      // loaded". The requested path is cached by the caller so repeated imports
+      // remain cheap and deterministic.
+      locking fAssembliesByName do
+        fAssembliesByName[lSimpleName] := lLoadedAssembly;
+      exit lLoadedAssembly;
+    end;
+  end;
 end;
 
 class method RuntimeState.RegisterAssemblySearchPath(aPath: String);
@@ -490,14 +547,9 @@ begin
         exit lAlreadyLoaded;
     end;
 
-    for each lLoadedAssembly in AppDomain.CurrentDomain.GetAssemblies() do begin
-      var lLoadedName := lLoadedAssembly.GetName();
-      if String.Equals(lLoadedName.Name, lSimpleName, StringComparison.OrdinalIgnoreCase) then begin
-        locking fAssembliesByName do
-          fAssembliesByName[lSimpleName] := lLoadedAssembly;
-        exit lLoadedAssembly;
-      end;
-    end;
+    var lAlreadyLoaded := AlreadyLoadedAssembly(aName);
+    if assigned(lAlreadyLoaded) then
+      exit lAlreadyLoaded;
 
     var lTrustedPath := ResolveTrustedPlatformAssembly(aName);
     if not String.IsNullOrWhiteSpace(lTrustedPath) and File.Exists(lTrustedPath) then begin
@@ -756,6 +808,37 @@ begin
   end, IntPtr.Zero);
 end;
 
+class method ObjectHelpers.ExceptionType(aException: IntPtr): IntPtr;
+begin
+  result := Safe.Value<IntPtr>(method begin
+    var lException := Handles.Target(aException) as Exception;
+    result := Handles.Alloc(coalesce(lException:GetType():FullName, 'System.Exception'));
+  end, IntPtr.Zero);
+end;
+
+class method ObjectHelpers.ExceptionMessage(aException: IntPtr): IntPtr;
+begin
+  result := Safe.Value<IntPtr>(method begin
+    var lException := Handles.Target(aException) as Exception;
+    result := Handles.Alloc(coalesce(lException:Message, 'Exception'));
+  end, IntPtr.Zero);
+end;
+
+class method ObjectHelpers.ExceptionStackTrace(aException: IntPtr): IntPtr;
+begin
+  result := Safe.Value<IntPtr>(method begin
+    var lException := Handles.Target(aException) as Exception;
+    result := Handles.Alloc(coalesce(lException:StackTrace, ''));
+  end, IntPtr.Zero);
+end;
+
+class method ObjectHelpers.IsException(aValue: IntPtr): Byte;
+begin
+  result := Safe.Value<Byte>(method begin
+    result := if Handles.Target(aValue) is Exception then Byte(1) else Byte(0);
+  end, 0);
+end;
+
 class method ObjectHelpers.ForceGarbageCollection: IntPtr;
 begin
   result := Safe.Value<IntPtr>(method begin
@@ -815,6 +898,20 @@ begin
     on e: Exception do
       result := Handles.Alloc(e);
   end;
+end;
+
+class method TestHelpers.ThrowArgumentException;
+begin
+  raise new ArgumentException('Marzipan bridge smoke-test argument exception.');
+end;
+
+class method TestHelpers.ThrowNullReferenceException;
+begin
+  var lObject: Object := nil;
+  // Use a real null dereference rather than explicitly raising
+  // NullReferenceException. This is the path runtimes historically treat
+  // specially, and the one Marzipan/Core must convert back into MZException.
+  lObject.ToString();
 end;
 
 class method StringHelpers.GetLength(aInstance: IntPtr): Integer;
@@ -1130,14 +1227,21 @@ end;
 
 class method CallFrameHelpers.Create(aMethodHandle: IntPtr; aTargetHandle: IntPtr; aArgumentCount: Integer): IntPtr;
 begin
-  result := Safe.Value<IntPtr>(method begin
+  try
     var lMethod := Handles.Target<MethodBridge>(aMethodHandle);
-    if lMethod = nil then
-      exit IntPtr.Zero;
+    if lMethod = nil then begin
+      var lMethodObject := Handles.Target(aMethodHandle);
+      if lMethodObject is Exception then
+        exit Handles.Alloc(lMethodObject);
+      exit Handles.Alloc(new ArgumentException('Call frame requires a valid managed method handle.'));
+    end;
 
     var lArgumentCount := Math.Max(aArgumentCount, lMethod.Parameters.Length);
     result := Handles.Alloc(new CallFrame(BridgeMethod := lMethod, Target := Handles.Target(aTargetHandle), Arguments := new Object[lArgumentCount]));
-  end, IntPtr.Zero);
+  except
+    on e: Exception do
+      result := Handles.Alloc(e);
+  end;
 end;
 
 class method CallFrameHelpers.SetObject(aFrameHandle: IntPtr; aIndex: Integer; aValueHandle: IntPtr);

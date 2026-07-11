@@ -6,7 +6,16 @@ uses
   Foundation;
 
 type
-  MZException = public class(NSException) end;
+  MZException = public class(NSException)
+  private
+    method get_managedExceptionType: NSString;
+    method get_managedExceptionMessage: NSString;
+    method get_managedExceptionStackTrace: NSString;
+  public
+    property managedExceptionType: NSString read get_managedExceptionType;
+    property managedExceptionMessage: NSString read get_managedExceptionMessage;
+    property managedExceptionStackTrace: NSString read get_managedExceptionStackTrace;
+  end;
 
   MZCoreRuntime = public class
   private
@@ -96,8 +105,10 @@ type
 
   MZType = public class
   private
-    fTypeName: NSString;
-    fAssembly: NSString;
+    class var fGetMethodHandleDelegate: ^Void;
+    class var fInstantiateHandleDelegate: ^Void;
+    var fTypeName: NSString;
+    var fAssembly: NSString;
   public
     constructor withTypeName(aTypeName: NSString) &assembly(aAssembly: NSString);
     property typeName: NSString read fTypeName;
@@ -180,10 +191,11 @@ type
   MZObject = public class
   protected
     fInstance: ^Void;
-    class var fFreeHandleDelegate: ^Void;
-    class var fEqualsDelegate, fDescriptionDelegate, fExceptionStringDelegate: ^Void;
+    class var fFreeHandleDelegate, fIsExceptionDelegate: ^Void;
+    class var fEqualsDelegate, fDescriptionDelegate, fExceptionStringDelegate, fExceptionTypeDelegate, fExceptionMessageDelegate, fExceptionStackTraceDelegate: ^Void;
     method setInstance(aInstance: ^Void);
   public
+    class method isExceptionHandle(aHandle: ^Void): Boolean;
     class method raiseException(aEx: ^Void);
     class method freeHandle(aHandle: ^Void);
     constructor withNetInstance(aInstance: ^Void);
@@ -288,6 +300,21 @@ method dlopen(path: ^AnsiChar; mode: Integer): ^Void; external;
 
 [System.Runtime.InteropServices.DllImport('/usr/lib/libSystem.B.dylib')]
 method dlsym(handle: ^Void; symbol: ^AnsiChar): ^Void; external;
+
+method MZException.get_managedExceptionType: NSString;
+begin
+  result := self.userInfo.objectForKey('ManagedExceptionType') as NSString;
+end;
+
+method MZException.get_managedExceptionMessage: NSString;
+begin
+  result := self.userInfo.objectForKey('ManagedExceptionMessage') as NSString;
+end;
+
+method MZException.get_managedExceptionStackTrace: NSString;
+begin
+  result := self.userInfo.objectForKey('ManagedExceptionStackTrace') as NSString;
+end;
 
 method fileExists(aPath: NSString): Boolean;
 begin
@@ -660,7 +687,14 @@ end;
 
 method MZType.getMethod(aSig: NSString): MZMethod;
 begin
-  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.TypeHelpers", "GetMethodHandle");
+  // Cache the bridge entry-point delegate. Creating a hostfxr function pointer is
+  // cheap during normal startup, but doing it while the managed debugger is
+  // already stopping or unwinding an exception gives CoreCLR one more thing to
+  // fail at exactly the wrong time. Mono thunks were stable process-wide; keep
+  // the Core bridge entry points process-wide as well.
+  if fGetMethodHandleDelegate = nil then
+    fGetMethodHandleDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.TypeHelpers", "GetMethodHandle");
+  var lDelegate := fGetMethodHandleDelegate;
   var lFunc: function(aAssembly: ^Void; aTypeName: ^Void; aSignature: ^Void): ^Void;
   ^^Void(@lFunc)^ := lDelegate;
 
@@ -669,6 +703,8 @@ begin
   var lSignature := MZString.NetStringWithNSString(aSig);
   try
     var lHandle := lFunc(lAssembly, lTypeName, lSignature);
+    if MZObject.isExceptionHandle(lHandle) then
+      MZObject.raiseException(lHandle);
     if lHandle = nil then
       raise new MZException withName("UnknownMethod") reason(NSString.stringWithFormat('Unknown Method "%@".', aSig)) userInfo(nil);
     result := new MZMethod withHandle(lHandle);
@@ -687,7 +723,9 @@ end;
 
 method MZType.instantiate: ^Void;
 begin
-  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.TypeHelpers", "InstantiateHandle");
+  if fInstantiateHandleDelegate = nil then
+    fInstantiateHandleDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.TypeHelpers", "InstantiateHandle");
+  var lDelegate := fInstantiateHandleDelegate;
   var lFunc: function(aAssembly: ^Void; aTypeName: ^Void): ^Void;
   ^^Void(@lFunc)^ := lDelegate;
 
@@ -695,6 +733,8 @@ begin
   var lTypeName := MZString.NetStringWithNSString(fTypeName);
   try
     result := lFunc(lAssembly, lTypeName);
+    if MZObject.isExceptionHandle(result) then
+      MZObject.raiseException(result);
   finally
     MZObject.freeHandle(lAssembly);
     MZObject.freeHandle(lTypeName);
@@ -726,6 +766,10 @@ begin
   var lFunc: function(aMethod: ^Void; aTarget: ^Void; aArgumentCount: Integer): ^Void;
   ^^Void(@lFunc)^ := fCreateDelegate;
   fHandle := lFunc(aMethod.handle, aTarget, aArgumentCount);
+  if MZObject.isExceptionHandle(fHandle) then
+    MZObject.raiseException(fHandle);
+  if not assigned(fHandle) then
+    raise new MZException withName("CallFrame") reason("Failed to create managed call frame.") userInfo(nil);
 end;
 
 method MZCallFrame.setObject(aIndex: Integer) value(aValue: ^Void);
@@ -1027,6 +1071,18 @@ end;
 
 // --- MZObject ---
 
+class method MZObject.isExceptionHandle(aHandle: ^Void): Boolean;
+begin
+  if aHandle = nil then
+    exit false;
+
+  if fIsExceptionDelegate = nil then
+    fIsExceptionDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "IsException");
+  var lFunc: function(aHandle: ^Void): Byte;
+  ^^Void(@lFunc)^ := fIsExceptionDelegate;
+  exit lFunc(aHandle) <> 0;
+end;
+
 constructor MZObject withNetInstance(aInstance: ^Void);
 begin
   if not assigned(aInstance) then
@@ -1089,11 +1145,28 @@ begin
 
   if fExceptionStringDelegate = nil then
     fExceptionStringDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionToString");
-  var lFunc: function(aException: ^Void): ^Void;
-  ^^Void(@lFunc)^ := fExceptionStringDelegate;
+  if fExceptionTypeDelegate = nil then
+    fExceptionTypeDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionType");
+  if fExceptionMessageDelegate = nil then
+    fExceptionMessageDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionMessage");
+  if fExceptionStackTraceDelegate = nil then
+    fExceptionStackTraceDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionStackTrace");
 
-  var lStringHandle := lFunc(aEx);
+  var lToString: function(aException: ^Void): ^Void;
+  var lGetType: function(aException: ^Void): ^Void;
+  var lGetMessage: function(aException: ^Void): ^Void;
+  var lGetStackTrace: function(aException: ^Void): ^Void;
+  ^^Void(@lToString)^ := fExceptionStringDelegate;
+  ^^Void(@lGetType)^ := fExceptionTypeDelegate;
+  ^^Void(@lGetMessage)^ := fExceptionMessageDelegate;
+  ^^Void(@lGetStackTrace)^ := fExceptionStackTraceDelegate;
+
   var lMessage: NSString := "Exception";
+  var lManagedType: NSString := nil;
+  var lManagedMessage: NSString := nil;
+  var lManagedStackTrace: NSString := nil;
+
+  var lStringHandle := lToString(aEx);
   if lStringHandle <> nil then begin
     try
       lMessage := MZString.NSStringWithNetString(lStringHandle);
@@ -1101,8 +1174,44 @@ begin
       freeHandle(lStringHandle);
     end;
   end;
+
+  var lTypeHandle := lGetType(aEx);
+  if lTypeHandle <> nil then begin
+    try
+      lManagedType := MZString.NSStringWithNetString(lTypeHandle);
+    finally
+      freeHandle(lTypeHandle);
+    end;
+  end;
+
+  var lMessageHandle := lGetMessage(aEx);
+  if lMessageHandle <> nil then begin
+    try
+      lManagedMessage := MZString.NSStringWithNetString(lMessageHandle);
+    finally
+      freeHandle(lMessageHandle);
+    end;
+  end;
+
+  var lStackTraceHandle := lGetStackTrace(aEx);
+  if lStackTraceHandle <> nil then begin
+    try
+      lManagedStackTrace := MZString.NSStringWithNetString(lStackTraceHandle);
+    finally
+      freeHandle(lStackTraceHandle);
+    end;
+  end;
+
+  var lUserInfo := new NSMutableDictionary;
+  if assigned(lManagedType) then
+    lUserInfo.setObject(lManagedType) forKey('ManagedExceptionType');
+  if assigned(lManagedMessage) then
+    lUserInfo.setObject(lManagedMessage) forKey('ManagedExceptionMessage');
+  if assigned(lManagedStackTrace) then
+    lUserInfo.setObject(lManagedStackTrace) forKey('ManagedExceptionStackTrace');
+
   freeHandle(aEx);
-  raise new MZException withName("Exception") reason(lMessage) userInfo(nil);
+  raise new MZException withName("Exception") reason(lMessage) userInfo(lUserInfo);
 end;
 
 class method MZObject.freeHandle(aHandle: ^Void);

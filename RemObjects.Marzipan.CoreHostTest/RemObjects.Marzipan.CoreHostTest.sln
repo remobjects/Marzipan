@@ -1,0 +1,20 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# RemObjects Fire
+Project("{656346d9-4656-40da-a068-22d5425d4639}") = "RemObjects.Marzipan.CoreHostTest", "RemObjects.Marzipan.CoreHostTest.elements", "{5f90f285-8b98-4f3a-9215-8d7218e37e1b}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|AnyCPU = Debug|AnyCPU
+		Release|AnyCPU = Release|AnyCPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{5f90f285-8b98-4f3a-9215-8d7218e37e1b}.Debug|AnyCPU.ActiveCfg = Debug|AnyCPU
+		{5f90f285-8b98-4f3a-9215-8d7218e37e1b}.Debug|AnyCPU.Build.0 = Debug|AnyCPU
+		{5f90f285-8b98-4f3a-9215-8d7218e37e1b}.Release|AnyCPU.ActiveCfg = Release|AnyCPU
+		{5f90f285-8b98-4f3a-9215-8d7218e37e1b}.Release|AnyCPU.Build.0 = Release|AnyCPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

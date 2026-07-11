@@ -12,6 +12,7 @@ type
   private
     class method WriteSyntax;
     class method LoadAssembliesFromFolder(aFolder: NSString);
+    class method InvokeBridgeSmokeException(aMethodName: NSString) expectedType(aExpectedType: NSString);
   public
     class method Main(args: array of String): Int32;
   end;
@@ -43,6 +44,35 @@ begin
     if lPath.pathExtension.lowercaseString = 'dll' then begin
       writeLn('Loading '+String(lPath.lastPathComponent));
       MZCoreRuntime.sharedInstance.loadAssembly(lPath);
+    end;
+  end;
+end;
+
+class method ConsoleApp.InvokeBridgeSmokeException(aMethodName: NSString) expectedType(aExpectedType: NSString);
+begin
+  writeLn('Testing managed exception propagation for '+String(aExpectedType)+'...');
+
+  var lType := new MZType withTypeName('RemObjects.Marzipan.Bridge.TestHelpers') &assembly('RemObjects.Marzipan.Bridge');
+  var lMethod := lType.getMethod(NSString.stringWithFormat(':%@()', aMethodName));
+  var lFrame := new MZCallFrame withMethod(lMethod) target(nil) argumentCount(0);
+  var lException := lFrame.invoke();
+
+  if not assigned(lException) then
+    raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Expected %@, but managed call returned normally.', aExpectedType)) userInfo(nil);
+
+  try
+    MZObject.raiseException(lException);
+    raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Expected %@, but no native exception was raised.', aExpectedType)) userInfo(nil);
+  except
+    on e: MZException do begin
+      if e.reason.rangeOfString(aExpectedType).location = Foundation.NSNotFound then
+        raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Expected %@, got: %@', aExpectedType, e.reason)) userInfo(nil);
+      if e.managedExceptionType.rangeOfString(aExpectedType).location = Foundation.NSNotFound then
+        raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Expected managedExceptionType %@, got: %@', aExpectedType, e.managedExceptionType)) userInfo(nil);
+      if e.managedExceptionStackTrace.rangeOfString(aMethodName).location = Foundation.NSNotFound then
+        raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Managed stack did not contain %@: %@', aMethodName, e.managedExceptionStackTrace)) userInfo(nil);
+      writeLn('Caught expected MZException: '+String(aExpectedType));
+      writeLn('Managed stack first line: '+String(e.managedExceptionStackTrace.componentsSeparatedByString(#10)[0]));
     end;
   end;
 end;
@@ -80,6 +110,9 @@ begin
     writeLn('Generated wrapper returned '+lSpaces.length.ToString+' spaces.');
     if lSpaces ≠ '    ' then
       raise new MZException withName('CoreHostTest') reason('Unexpected BaseParser.GetSpaces result.') userInfo(nil);
+
+    InvokeBridgeSmokeException('ThrowArgumentException') expectedType('System.ArgumentException');
+    InvokeBridgeSmokeException('ThrowNullReferenceException') expectedType('System.NullReferenceException');
 
     writeLn('Core host smoke test passed.');
     exit 0;
