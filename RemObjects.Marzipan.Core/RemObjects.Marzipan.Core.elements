@@ -10,6 +10,7 @@
     <CreateHeaderFile>True</CreateHeaderFile>
     <DefaultUses>RemObjects.Elements.RTL</DefaultUses>
     <BinaryName>MarzipanCore</BinaryName>
+    <DeploymentTargetVersion>12.0</DeploymentTargetVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)' == 'Debug' ">
     <Optimize>False</Optimize>
