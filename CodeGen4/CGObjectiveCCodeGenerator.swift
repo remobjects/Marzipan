@@ -36,7 +36,7 @@ public __abstract class CGObjectiveCCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateForEachLoopStatement(_ statement: CGForEachLoopStatement) {
 		Append("for (")
-		generateIdentifier(statement.LoopVariableName)
+		generateSingleNameOrTupleWithNames(statement.LoopVariableNames)
 		Append(" in ")
 		generateExpression(statement.Collection)
 		AppendLine(")")
@@ -134,13 +134,13 @@ public __abstract class CGObjectiveCCodeGenerator : CGCStyleCodeGenerator {
 	}
 	*/
 
-	override func generateThrowStatement(_ statement: CGThrowStatement) {
+	override func generateThrowExpression(_ statement: CGThrowExpression) {
 		if let value = statement.Exception {
 			Append("@throw ")
 			generateExpression(value)
-			AppendLine(";")
+			Append(";")
 		} else {
-			AppendLine("@throw;")
+			Append("@throw")
 		}
 	}
 
@@ -265,8 +265,35 @@ public __abstract class CGObjectiveCCodeGenerator : CGCStyleCodeGenerator {
 		assert(false, "generateAwaitExpression is not supported in Objective-C")
 	}
 
-	override func generateAnonymousMethodExpression(_ expression: CGAnonymousMethodExpression) {
-		// todo
+	override func generateAnonymousMethodExpression(_ method: CGAnonymousMethodExpression) {
+		//if let returnType = method.ReturnType {
+			//generateTypeReference(returnType)
+			//Append(" ")
+		//} else {
+			//Append("void ")
+		//}
+
+		if method.Parameters.Count > 0 {
+			Append("^(")
+			helpGenerateCommaSeparatedList(method.Parameters) { param in
+				if let type = param.`Type` {
+					self.generateTypeReference(type)
+					self.Append(" ")
+				} else {
+					self.Append("id ")
+				}
+				self.generateIdentifier(param.Name)
+			}
+			Append(") ")
+		} else {
+			Append("^")
+		}
+		AppendLine("{")
+		incIndent()
+		generateStatements(variables: method.LocalVariables)
+		generateStatementsSkippingOuterBeginEndBlock(method.Statements)
+		decIndent()
+		Append("}")
 	}
 
 	override func generateAnonymousTypeExpression(_ expression: CGAnonymousTypeExpression) {
@@ -456,6 +483,7 @@ public __abstract class CGObjectiveCCodeGenerator : CGCStyleCodeGenerator {
 	override func generateNewInstanceExpression(_ expression: CGNewInstanceExpression) {
 		Append("[[")
 		generateExpression(expression.`Type`, ignoreNullability:true)
+		generateGenericArguments(expression.GenericArguments)
 		Append(" alloc] init")
 		if let name = expression.ConstructorName {
 			generateIdentifier(uppercaseFirstLetter(name))

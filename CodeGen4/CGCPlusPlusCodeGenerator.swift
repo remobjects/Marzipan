@@ -58,6 +58,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 		//        "switch", "template", "this", "thread_local", "throw", "true", "try", "typedef", "typeid",
 		//        "typename", "typeof", "undef", "union", "unsigned", "using", "uuidof", "virtual", "void",
 		//        "volatile", "wchar_t", "while", "xor", "xor_eq"].ToList() as! List<String>;
+		splitLinesLongerThan = 200;
 	}
 
 	public convenience init(dialect: CGCPlusPlusCodeGeneratorDialect) {
@@ -189,13 +190,12 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 	}
 	*/
 
-	override func generateThrowStatement(_ statement: CGThrowStatement) {
+	override func generateThrowExpression(_ statement: CGThrowExpression) {
 		if let value = statement.Exception {
 			Append("throw ")
 			generateExpression(value)
-			AppendLine(";")
 		} else {
-			AppendLine("throw;")
+			Append("throw")
 		}
 	}
 
@@ -215,13 +215,21 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 		if statement.Constant {
 			Append("const ");
 		}
-		if let type = statement.`Type` {
+		if let array = statement.`Type` as? CGArrayTypeReference {
+			generateTypeReference(array.Type)
+			Append(" ")
+		}
+		else if let type = statement.`Type` {
 			generateTypeReference(type)
 			Append(" ")
 		} else {
 //            Append("id ")
 		}
 		generateIdentifier(statement.Name)
+		if let array = statement.`Type` as? CGArrayTypeReference {
+			generateArrayBounds(array)
+		}
+
 		if let value = statement.Value {
 			Append(" = ")
 			generateExpression(value)
@@ -273,7 +281,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateDefaultExpression(_ expression: CGDefaultExpression) {
-		assert(false, "generateDefaultExpression is not supported in Objective-C")
+		assert(false, "generateDefaultExpression is not supported in C++")
 	}
 
 	override func generateSelectorExpression(_ expression: CGSelectorExpression) {
@@ -283,9 +291,15 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 	override func generateTypeCastExpression(_ cast: CGTypeCastExpression) {
 		if cast.ThrowsException {
 			//dynamic_cast<MyClass *>(ptr)
-			Append("dynamic_cast<")
-			generateTypeReference(cast.TargetType)
-			Append(">(")
+			if (cast.CastKind == .Interface) {
+				Append("interface_cast<")
+				generateTypeReference(cast.TargetType, ignoreNullability: true)
+				Append(">(")
+			} else {
+				Append("dynamic_cast<")
+				generateTypeReference(cast.TargetType)
+				Append(">(")
+			}
 			generateExpression(cast.Expression)
 			Append(")")
 		} else {
@@ -467,14 +481,11 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 				case .Unspecified:
 					if let typeref = expression.CallSite as? CGTypeReferenceExpression {
 						Append("::")
-					}
-					else if let typeref = expression.CallSite as? CGInheritedExpression {
+					} else if let typeref = expression.CallSite as? CGInheritedExpression {
 						Append("::")
-					}
-					else if let typeref = expression.CallSite as? CGSelfExpression {
+					} else if let typeref = expression.CallSite as? CGSelfExpression {
 						Append(".")
-					}
-					else {
+					} else {
 						Append(".")
 					}
 			}
@@ -504,6 +515,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 	override func generateNewInstanceExpression(_ expression: CGNewInstanceExpression) {
 		Append("new ")
 		generateExpression(expression.`Type`, ignoreNullability: true)
+		generateGenericArguments(expression.GenericArguments)
 		Append("(")
 		cppGenerateCallParameters(expression.Parameters)
 		Append(")")
@@ -569,8 +581,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 					Append("OPENARRAY(")
 					generateTypeReference(ltype)
 					Append(", (")
-				}
-				else {
+				} else {
 					// array of const
 					Append("ARRAYOFCONST((")
 				}
@@ -582,11 +593,11 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 				return;
 			}
 		}
-		Append("[")
+		Append("{")
 		helpGenerateCommaSeparatedList(array.Elements) { e in
 			self.generateExpression(e)
 		}
-		Append("]")
+		Append("}")
 	}
 
 	override func generateSetLiteralExpression(_ expression: CGSetLiteralExpression) {
@@ -722,8 +733,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 				case .Register:         Append("__fastcall ")
 				default:
 			}
-		}
-		else if isVC(){
+		} else if isVC(){
 			switch callingConvention {
 				case .CDecl:         Append("__cdecl ")
 				case .ClrCall:         Append("__clrcall ")
@@ -733,8 +743,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 				case .VectorCall:     Append("__vectorcall ")
 				default:
 			}
-		}
-		else if isStandard() {
+		} else if isStandard() {
 			// only cdecl is used be default;
 		}
 	}
@@ -748,8 +757,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 			if method.Static {
 				if isCBuilder()    {
 					Append("__classmethod ")
-				}
-				else
+				} else
 				{
 					Append("static ")
 				}
@@ -758,8 +766,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 		if header {
 			if isInterface && isCBuilder(){
 				Append("virtual ");
-			}
-			else if !isGlobal {
+			} else if !isGlobal {
 				// virtuality isn't supported for globals
 				switch (method.Virtuality) {
 					case .Virtual:       Append("virtual ");
@@ -794,20 +801,21 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 				Append("::")
 			}
 			if let lname = method.Name, lname != "" {
-				generateIdentifier(uppercaseFirstLetter(lname))
-			}
-			else {
-				generateIdentifier(uppercaseFirstLetter(type.Name))
+				generateIdentifier(lname)
+			} else {
+				generateIdentifier(type.Name)
 			}
 		} else if isDtor {
 			if !header {
 				if let namespace = currentUnit.Namespace {
 					generateIdentifier(namespace.Name)
 					Append("::")
+					generateIdentifier(type.Name)
+					Append("::")
 				}
 			}
 			Append("~")
-			generateIdentifier(uppercaseFirstLetter(type.Name));
+			generateIdentifier(type.Name);
 		} else {
 			if !header {
 				if !(isGlobal && (method.Visibility == .Private)) {
@@ -1011,14 +1019,28 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 			}
 		}
 		generateTypeReference(type.`Type`)
+		generateArrayBounds(type)
+	}
+
+	func generateArrayBounds(_ type: CGArrayTypeReference) {
 		if let bounds = type.Bounds {
 			var count = bounds.Count
 			if count == 0 {
-				count = 1
-			}
-			for b in 0 ..< count {
 				Append("[]")
 			}
+			else {
+				for b in bounds {
+					if let end = b.End {
+						Append("[")
+						generateExpression(end)
+						Append("]")
+					} else {
+						Append("[]")
+					}
+				}
+			}
+		} else {
+			Append("[]")
 		}
 	}
 
@@ -1044,7 +1066,7 @@ public __abstract class CGCPlusPlusCodeGenerator : CGCStyleCodeGenerator {
 		generateTypeReference(type.`Type`)
 		if type.Reference {
 			Append("&")
-		}        else {
+		} else {
 			Append("*")
 		}
 	}

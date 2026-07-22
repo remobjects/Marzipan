@@ -1,19 +1,21 @@
-﻿public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
+﻿public enum CGOxygeneCodeGeneratorStyle {
+	case Standard
+	case Unified
+	case GroupUnified
+}
 
-	public enum CGOxygeneCodeGeneratorStyle {
-		case Standard
-		case Unified
-	}
+public enum CGOxygeneStringQuoteStyle {
+	case Single
+	case Double
+	case SmartSingle
+	case SmartDouble
+	case CodeDomSafe
+}
 
-	public enum CGOxygeneStringQuoteStyle {
-		case Single
-		case Double
-		case SmartSingle
-		case SmartDouble
-	}
+public class CGOxygeneCodeGenerator : CGPascalCodeGenerator {
 
 	public init() {
-		super.init()
+		super.init(dialect: .Oxygene)
 
 		// current as of Elements 8.1
 		keywords = ["abstract", "add", "and", "array", "as", "asc", "aspect", "assembly", "async", "autoreleasepool", "await",
@@ -30,7 +32,7 @@
 					"mapped", "matching", "method", "mod", "module", "namespace",
 					"nested", "new", "nil", "not", "notify", "nullable",
 					"of", "old", "on", "operator", "optional", "or", "order", "out", "override",
-					"parallel", "param", "params", "partial", "pinned", "private", "procedure", "property", "protected", "public",
+					"parallel", "param", "params", "partial", "pinned", "private", "procedure", "property", "protected", "public", "published",
 					"queryable", "raise", "raises", "read", "readonly", "record", "reintroduce", "remove", "repeat", "require", "result", "reverse", "sealed",
 					"select", "selector -", "self", "sequence", "set", "shl", "shr", "skip", "soft", "static", "step", "strong",
 					"take", "then", "to", "true", "try", "type",
@@ -44,7 +46,9 @@
 	public var Style: CGOxygeneCodeGeneratorStyle = .Standard
 	public var QuoteStyle: CGOxygeneStringQuoteStyle = .SmartSingle
 
-	override var isUnified: Boolean { return Style == .Unified }
+	override var isUnified: Boolean { return (Style == .Unified) || (Style == .GroupUnified) }
+	override var groupUnified: Boolean { return Style == .GroupUnified }
+	override var supportsInterfaceVisibilities: Boolean { return true }
 
 	public convenience init(style: CGOxygeneCodeGeneratorStyle) {
 		init()
@@ -78,6 +82,23 @@
 	}
 
 	//
+	// Types
+	//
+
+	override func pascalGenerateImplementedInterface(_ member: CGMemberDefinition) {
+		if let implementsInterface = member.ImplementsInterface {
+			Append(" implements ")
+			generateTypeReference(implementsInterface)
+			if let implementsInterfaceMember = member.ImplementsInterfaceMember {
+				Append(".")
+				generateIdentifier(implementsInterfaceMember)
+			}
+			Append(";")
+		}
+	}
+
+
+	//
 	// Statements
 	//
 
@@ -95,12 +116,14 @@
 
 	override func generateUsingStatement(_ statement: CGUsingStatement) {
 		Append("using ")
-		generateIdentifier(statement.Name)
-		if let type = statement.`Type` {
-			Append(": ")
-			generateTypeReference(type)
+		if let name = statement.Name {
+			generateIdentifier(name)
+			if let type = statement.`Type` {
+				Append(": ")
+				generateTypeReference(type)
+			}
+			Append(" := ")
 		}
-		Append(" := ")
 		generateExpression(statement.Value)
 		Append(" do")
 		generateStatementIndentedOrTrailingIfItsABeginEndBlock(statement.NestedStatement)
@@ -111,20 +134,19 @@
 		generateStatementIndentedOrTrailingIfItsABeginEndBlock(statement.NestedStatement)
 	}
 
-	override func generateReturnStatement(_ statement: CGReturnStatement) {
-		if let value = statement.Value {
-			Append("exit ")
-			generateExpression(value)
-			AppendLine(";")
-		} else {
-			AppendLine("exit;")
-		}
-	}
+	//override func generateReturnStatement(_ statement: CGReturnStatement) {
+		//if let value = statement.Value {
+			//Append("exit ")
+			//generateExpression(value)
+			//AppendLine(";")
+		//} else {
+			//AppendLine("exit;")
+		//}
+	//}
 
-	override func generateYieldStatement(_ statement: CGYieldStatement) {
+	override func generateYieldExpression(_ statement: CGYieldExpression) {
 		Append("yield ")
 		generateExpression(statement.Value)
-		AppendLine(";")
 	}
 
 	override func generateVariableDeclarationStatement(_ statement: CGVariableDeclarationStatement) {
@@ -164,6 +186,31 @@
 		Append("(")
 		pascalGenerateCallParameters(statement.Parameters)
 		AppendLine(");")
+	}
+
+	override func generateLocalMethodStatement(_ method: CGLocalMethodStatement) {
+		Append("method ")
+		generateIdentifier(method.Name)
+		if method.Parameters.Count > 0 {
+			Append("(")
+			pascalGenerateDefinitionParameters(method.Parameters, implementation: false)
+			Append(")")
+		}
+
+		if let returnType = method.ReturnType, !returnType.IsVoid {
+			Append(": ")
+			returnType.startLocation = currentLocation
+			generateTypeReference(returnType)
+			returnType.endLocation = currentLocation
+		}
+		AppendLine(";")
+
+		AppendLine("begin")
+		incIndent()
+		generateStatements(variables: method.LocalVariables)
+		generateStatements(method.Statements)
+		decIndent()
+		AppendLine("end;")
 	}
 
 	//
@@ -311,10 +358,20 @@
 				param.startLocation = currentLocation
 			}
 
+			var isXMLDocPresent = self.isXmlDocumentationPresent(param.XmlDocumentation);
 			if !implementation {
-				self.generateAttributes(param.Attributes, inline: true)
+				if isXMLDocPresent {
+					self.incIndent();
+				}
+				self.generateXmlDocumentationStatement(param.XmlDocumentation)
+				self.generateAttributes(param.Attributes, inline: param.InlineAttributes)
 			}
 			generateParameterDefinition(param)
+			if !implementation {
+				if isXMLDocPresent {
+					self.decIndent();
+				}
+			}
 			param.endLocation = currentLocation
 		}
 	}
@@ -333,6 +390,7 @@
 				Append(" ")
 				generateIdentifier(name)
 			}
+			generateGenericArguments(expression.GenericArguments)
 			Append("(")
 			pascalGenerateCallParameters(expression.Parameters)
 
@@ -351,14 +409,35 @@
 	}
 
 	override func generateStringLiteralExpression(_ expression: CGStringLiteralExpression) {
+		generateStringLiteralExpression(expression, style: QuoteStyle)
+	}
+
+	public func generateStringLiteralExpression(_ expression: CGStringLiteralExpression, style quoteStyle: CGOxygeneStringQuoteStyle) {
 		let SINGLE: Char = "'"
 		let DOUBLE: Char = "\""
 		let quoteChar: Char
-		switch QuoteStyle {
+		switch quoteStyle {
 			case .Single: quoteChar = SINGLE
 			case .Double: quoteChar = DOUBLE
-			case .SmartSingle: quoteChar = expression.Value.Contains(SINGLE) && !expression.Value.Contains(DOUBLE) ? DOUBLE : SINGLE
+			case .CodeDomSafe: fallthrough
+			//case .SmartSingle: quoteChar = expression.Value.Contains(SINGLE) && !expression.Value.Contains(DOUBLE) ? DOUBLE : SINGLE
 			case .SmartDouble: quoteChar = expression.Value.Contains(DOUBLE) && !expression.Value.Contains(SINGLE) ? SINGLE : DOUBLE
+			default:
+				// = .SmartSingle
+				quoteChar = expression.Value.Contains(SINGLE) && !expression.Value.Contains(DOUBLE) ? DOUBLE : SINGLE
+		}
+		if quoteStyle == .CodeDomSafe && length(expression.Value) == 1 {
+			let ch = expression.Value[0]
+			switch ord(ch) {
+				case 34:
+					Append("\"\"\"\"")
+					return
+				case 32...127:
+					break //process as normal, below
+				default:
+					Append("\"\"#\(ord(ch))")
+					return
+			}
 		}
 		AppendPascalEscapeCharactersInStringLiteral(expression.Value, quoteChar: quoteChar)
 	}
@@ -368,11 +447,16 @@
 	//
 
 	override func pascalGenerateTypeVisibilityPrefix(_ visibility: CGTypeVisibilityKind) {
-		switch visibility {
-			case .Unspecified: break /* no-op */
-			case .Unit: Append("unit ")
-			case .Assembly: Append("assembly ")
-			case .Public: Append("public ")
+		if let currentNestedType = currentNestedType {
+			pascalGenerateMemberVisibilityKeyword(currentNestedType.Visibility)
+			Append(" ")
+		} else {
+			switch visibility {
+				case .Unspecified: break /* no-op */
+				case .Unit: Append("unit ")
+				case .Assembly: Append("assembly ")
+				case .Public: Append("public ")
+			}
 		}
 	}
 
@@ -387,17 +471,17 @@
 			case .AssemblyAndProtected: Append("assembly and protected")
 			case .AssemblyOrProtected: Append("assembly or protected")
 			case .Protected: Append("protected")
-			case .Published: fallthrough
+			case .Published: Append("published");
 			case .Public: Append("public")
 		}
 	}
 
-	override func generateBlockType(_ block: CGBlockTypeDefinition) {
-		generateIdentifier(block.Name)
-		pascalGenerateGenericParameters(block.GenericParameters)
+	override func generateBlockType(_ type: CGBlockTypeDefinition) {
+		pascalGenerateTypeName(type)
+		pascalGenerateGenericParameters(type.GenericParameters)
 		Append(" = ")
-		pascalGenerateTypeVisibilityPrefix(block.Visibility)
-		pascalGenerateInlineBlockType(block)
+		pascalGenerateTypeVisibilityPrefix(type.Visibility)
+		pascalGenerateInlineBlockType(type)
 		AppendLine(";")
 	}
 
@@ -418,7 +502,7 @@
 	}
 
 	override func generateExtensionTypeStart(_ type: CGExtensionTypeDefinition) {
-		generateIdentifier(type.Name)
+		pascalGenerateTypeName(type)
 		pascalGenerateGenericParameters(type.GenericParameters)
 		Append(" = ")
 		pascalGenerateTypeVisibilityPrefix(type.Visibility)
@@ -430,13 +514,28 @@
 		incIndent()
 	}
 
+	override func generateMappedTypeStart(_ type: CGMappedTypeDefinition) {
+		pascalGenerateTypeName(type)
+		pascalGenerateGenericParameters(type.GenericParameters)
+		Append(" = ")
+		pascalGenerateTypeVisibilityPrefix(type.Visibility)
+		pascalGenerateStaticPrefix(type.Static)
+		Append("class")
+		pascalGenerateAncestorList(type)
+		Append(" mapped to ")
+		generateTypeReference(type.mappedType)
+		pascalGenerateGenericConstraints(type.GenericParameters, needSemicolon: true)
+		AppendLine()
+		incIndent()
+	}
+
 	//
 	// Type Members
 	//
 
-	override func pascalKeywordForMethod(_ method: CGMethodDefinition) -> String {
-		return "method"
-	}
+	//override func pascalKeywordForMethod(_ method: CGMethodDefinition) -> String {
+		//return "method"
+	//}
 
 	override func pascalGenerateVirtualityModifiders(_ member: CGMemberDefinition) {
 		switch member.Virtuality {
@@ -453,7 +552,7 @@
 	}
 
 	override func pascalGenerateConstructorHeader(_ ctor: CGMethodLikeMemberDefinition, type: CGTypeDefinition, methodKeyword: String, implementation: Boolean, includeVisibility: Boolean = false) {
-		if ctor.Static {
+		if ctor.Static && !type?.Static {
 			Append("class ")
 		}
 
@@ -473,14 +572,14 @@
 		Append("finalizer")
 		if implementation {
 			Append(" ")
-			generateIdentifier(type.Name)
+			pascalGenerateTypeNameForImplementation(type)
 		}
 		pascalGenerateSecondHalfOfMethodHeader(method, implementation: implementation)
 	}
 
-	override func generateDestructorDefinition(_ dtor: CGDestructorDefinition, type: CGTypeDefinition) {
-		assert(false, "generateDestructorDefinition is not supported in Oxygene")
-	}
+	//override func generateDestructorDefinition(_ dtor: CGDestructorDefinition, type: CGTypeDefinition) {
+		//assert(false, "generateDestructorDefinition is not supported in Oxygene")
+	//}
 
 	override func pascalGenerateDestructorImplementation(_ dtor: CGDestructorDefinition, type: CGTypeDefinition) {
 		assert(false, "pascalGenerateDestructorImplementation is not supported in Oxygene")
@@ -488,18 +587,18 @@
 
 	override func generateFinalizerDefinition(_ finalizer: CGFinalizerDefinition, type: CGTypeDefinition) {
 		pascalGenerateFinalizerHeader(finalizer, type: type, implementation: false)
-		if isUnified {
-			pascalGenerateMethodBody(finalizer, type: type)
+		if isUnified && !definitionOnly {
+			pascalGenerateMethodBody(finalizer, type: type, allowLocalVariables: false)
 		}
 	}
 
 	override func pascalGenerateFinalizerImplementation(_ finalizer: CGFinalizerDefinition, type: CGTypeDefinition) {
 		pascalGenerateFinalizerHeader(finalizer, type: type, implementation: true)
-		pascalGenerateMethodBody(finalizer, type: type)
+		pascalGenerateMethodBody(finalizer, type: type, allowLocalVariables: !isUnified)
 	}
 
 	override func generateEventDefinition(_ event: CGEventDefinition, type: CGTypeDefinition) {
-		if event.Static {
+		if event.Static && !type?.Static {
 			Append("class ")
 		}
 		Append("event ")
@@ -512,6 +611,12 @@
 		if !definitionOnly {
 			//todo: add/remove/raise
 		}
+		if isUnified && !groupUnified && (event.Visibility != .Unspecified) {
+			Append(" ")
+			pascalGenerateMemberVisibilityKeyword(event.Visibility)
+			Append(StatementTerminator)
+		}
+		pascalGenerateImplementedInterface(event)
 		pascalGenerateVirtualityModifiders(event)
 		AppendLine()
 	}
@@ -590,7 +695,7 @@
 			case .UTF32Char: Append("UInt32") // tood?
 			case .Dynamic: Append("dynamic")
 			case .InstanceType: Append("InstanceType")
-			case .Void: Append("{VOID}")
+			case .Void: Append("Void")
 			case .Object: Append("Object")
 			case .Class: generateIdentifier("Class") // todo: make platform-specific
 		}
@@ -644,4 +749,15 @@
 		generateTypeReference(sequence.`Type`)
 	}
 
+	override func generateDictionaryTypeReference(_ type: CGDictionaryTypeReference, ignoreNullability: Boolean = false) {
+		if !ignoreNullability {
+			pascalGeneratePrefixForNullability(type)
+		}
+		super.generateDictionaryTypeReference(type, ignoreNullability: ignoreNullability)
+	}
+
+	override internal func generateMetaTypeReference(_ type: CGMetaTypeReference, ignoreNullability: Boolean = false) {
+		Append("class of ")
+		generateTypeReference(type.Type)
+	}
 }

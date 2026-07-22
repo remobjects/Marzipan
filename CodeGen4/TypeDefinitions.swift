@@ -7,21 +7,34 @@ public enum CGTypeVisibilityKind {
 	case Public
 }
 
-public __abstract class CGTypeDefinition : CGEntity {
+public protocol ICGHasCondition {
+	var Condition: CGConditionalDefine? { get }
+}
+
+public __abstract class CGTypeDefinition : CGEntity, ICGHasCondition {
 	public var GenericParameters = List<CGGenericParameterDefinition>()
 	public var Name: String
 	public var Members = List<CGMemberDefinition>()
 	public var Visibility: CGTypeVisibilityKind = .Unspecified        //in delphi, types with .Unit will be put into implementation section
 	public var Static = false
+	public var JavaStatic = false // Java language static types arent static in the regular sense
 	public var Sealed = false
 	public var Abstract = false
 	public var Comment: CGCommentStatement?
+	public var XmlDocumentation: CGXmlDocumentationStatement?
 	public var Attributes = List<CGAttribute>()
 	public var Condition: CGConditionalDefine?
+	public var Deprecated: Boolean? /* Delphi only */
+	public var DeprecationMessage: String? /* Delphi only */
 
 	public init(_ name: String) {
 		Name = name
 	}
+
+	@ToString func ToString() -> String {
+		return Name;
+	}
+
 }
 
 public final class CGGlobalTypeDefinition : CGTypeDefinition {
@@ -35,6 +48,7 @@ public final class CGGlobalTypeDefinition : CGTypeDefinition {
 
 public class CGTypeAliasDefinition : CGTypeDefinition {
 	public var ActualType: CGTypeReference
+	public var Strict: Boolean = false
 
 	public init(_ name: String, _ actualType: CGTypeReference) {
 		super.init(name)
@@ -42,10 +56,20 @@ public class CGTypeAliasDefinition : CGTypeDefinition {
 	}
 }
 
+public class CGCombinedInterfaceDefinition : CGTypeDefinition {
+	public var Interfaces: List<CGTypeReference>
+
+	public init(_ name: String, _ interfaces: List<CGTypeReference>) {
+		super.init(name)
+		Interfaces = interfaces
+	}
+}
+
 public class CGBlockTypeDefinition : CGTypeDefinition {
 	public var Parameters = List<CGParameterDefinition>()
 	public var ReturnType: CGTypeReference?
 	public var IsPlainFunctionPointer = false
+	public var Throws = false /* Swift and Java only */
 }
 
 public class CGEnumTypeDefinition : CGTypeDefinition {
@@ -56,6 +80,9 @@ public __abstract class CGClassOrStructTypeDefinition : CGTypeDefinition {
 	public var Ancestors: List<CGTypeReference>
 	public var ImplementedInterfaces: List<CGTypeReference>
 	public var Partial = false
+
+	//public var PublicInvariants: List<CGInvariant>?
+	//public var PrivateInvariants: List<CGInvariant>?
 
 	public init(_ name: String) {
 		super.init(name)
@@ -100,6 +127,30 @@ public class CGInterfaceTypeDefinition : CGClassOrStructTypeDefinition {
 public class CGExtensionTypeDefinition : CGClassOrStructTypeDefinition {
 }
 
+public class CGMappedTypeDefinition : CGClassOrStructTypeDefinition {
+	public var mappedType: CGTypeReference
+
+	public init(_ name: String, mappedType: CGTypeReference) {
+		super.init(name)
+		self.mappedType = mappedType
+	}
+	public init(_ name: String, mappedType: CGTypeReference, _ ancestor: CGTypeReference) {
+		super.init(name, ancestor)
+		self.mappedType = mappedType
+	}
+	public init(_ name: String, mappedType: CGTypeReference, _ ancestors: List<CGTypeReference>) {
+		super.init(name, ancestors)
+		self.mappedType = mappedType
+	}
+	public init(_ name: String, mappedType: CGTypeReference, _ ancestor: CGTypeReference, _ interfaces: List<CGTypeReference>) {
+		super.init(name, ancestor, interfaces)
+		self.mappedType = mappedType
+	}
+	public init(_ name: String, mappedType: CGTypeReference, _ ancestors: List<CGTypeReference>, _ interfaces: List<CGTypeReference>) {
+		super.init(name, ancestors, interfaces)
+		self.mappedType = mappedType
+	}}
+
 /* Type members */
 
 public enum CGMemberVisibilityKind {
@@ -122,9 +173,10 @@ public enum CGMemberVirtualityKind {
 	case Abstract
 	case Override
 	case Final
+	case Dynamic // Delphi only
 }
 
-public __abstract class CGMemberDefinition: CGEntity {
+public __abstract class CGMemberDefinition: CGEntity, ICGHasCondition {
 	public var Name: String
 	public var Visibility: CGMemberVisibilityKind = .Private
 	public var Virtuality: CGMemberVirtualityKind = .None
@@ -134,14 +186,33 @@ public __abstract class CGMemberDefinition: CGEntity {
 	public var Locked = false /* Oxygene only */
 	public var LockedOn: CGExpression? /* Oxygene only */
 	public var Comment: CGCommentStatement?
+	public var XmlDocumentation: CGXmlDocumentationStatement?
 	public var Attributes = List<CGAttribute>()
+	public var InlineAttributes = true
 	public var Condition: CGConditionalDefine?
 	public var ThrownExceptions: List<CGTypeReference>? // nil means unknown; empty list means known to not throw.
 	public var ImplementsInterface: CGTypeReference?
 	public var ImplementsInterfaceMember: String?
+	public var Deprecated: Boolean? /* Delphi only */
+	public var DeprecationMessage: String? /* Delphi only */
 
 	public init(_ name: String) {
 		Name = name
+	}
+}
+
+public class CGRawMemberDefinition: CGMemberDefinition {
+	public var Lines: List<String>
+
+	public init(_ lines: List<String>) {
+		super.init("__UNNAMED__")
+		Lines = lines
+	}
+	/*public convenience init(_ lines: String ...) {
+		init(lines.ToList())
+	}*/
+	public init(_ lines: String) {
+		Lines = lines.Replace("\r", "").Split("\n").MutableVersion()
 	}
 }
 
@@ -189,6 +260,7 @@ public __abstract class CGMethodLikeMemberDefinition: CGMemberDefinition {
 	public var LocalVariables: List<CGVariableDeclarationStatement>? // Legacy Delphi only.
 	public var LocalTypes: List<CGTypeDefinition>? // Legacy Delphi only.
 	public var LocalMethods: List<CGMethodDefinition>? // Pascal only.
+	public var Handles: CGExpression? // Visual Basic only.
 
 	public init(_ name: String) {
 		super.init(name)
@@ -206,10 +278,14 @@ public __abstract class CGMethodLikeMemberDefinition: CGMemberDefinition {
 
 public class CGMethodDefinition: CGMethodLikeMemberDefinition {
 	public var GenericParameters: List<CGGenericParameterDefinition>?
+	public var Preconditions: List<CGInvariant>?
+	public var Postconditions: List<CGInvariant>?
 }
 
 public class CGConstructorDefinition: CGMethodLikeMemberDefinition {
 	public var Nullability = CGTypeNullabilityKind.NotNullable /* Swift only. currently. */
+	public var Required = false /* Swift only. currently. */
+	public var Failable = false /* Swift only. currently. */
 
 	public init() {
 		super.init("")
@@ -223,6 +299,15 @@ public class CGConstructorDefinition: CGMethodLikeMemberDefinition {
 	}
 	convenience public init(_ name: String, _ statements: CGStatement...) {
 		init(name, statements.ToList())
+	}
+
+	public var NestedConstrutorCall: CGConstructorCallStatement? {
+		for s in Statements {
+			if let ctorCall = s as? CGConstructorCallStatement {
+				return ctorCall
+			}
+		}
+		return nil
 	}
 }
 
@@ -270,6 +355,7 @@ public __abstract class CGFieldOrPropertyDefinition: CGFieldLikeMemberDefinition
 public class CGFieldDefinition: CGFieldOrPropertyDefinition {
 	public var Constant = false
 	public var Volatile = false
+	public var WithEvents = false // Visual Basic only.
 }
 
 public class CGPropertyDefinition: CGFieldOrPropertyDefinition {
@@ -305,12 +391,31 @@ public class CGPropertyDefinition: CGFieldOrPropertyDefinition {
 		SetExpression = setExpression
 	}
 
+	internal var HasGetterMethod: Boolean {
+		if let getStatements = GetStatements, let type = `Type` {
+			return true
+		} else if let getExpression = GetExpression, let type = `Type` {
+			return true
+		}
+		return false
+	}
+
+	internal var HasSetterMethod: Boolean {
+		if let setStatements = GetStatements, let type = `Type` {
+			return true
+		} else if let setExpression = SetExpression, let type = `Type` {
+			return true
+		}
+		return false
+	}
+
 	internal func GetterMethodDefinition(`prefix`: String = "get__") -> CGMethodDefinition? {
 		if let getStatements = GetStatements, let type = `Type` {
 			let method = CGMethodDefinition(`prefix`+Name, getStatements)
 			method.ReturnType = type
 			method.Parameters = Parameters
 			method.Static = Static
+			method.Condition = Condition
 			return method
 		} else if let getExpression = GetExpression, let type = `Type` {
 			let method = CGMethodDefinition(`prefix`+Name)
@@ -318,6 +423,7 @@ public class CGPropertyDefinition: CGFieldOrPropertyDefinition {
 			method.Parameters = Parameters
 			method.Statements.Add(getExpression.AsReturnStatement())
 			method.Static = Static
+			method.Condition = Condition
 			return method
 		}
 		return nil
@@ -330,12 +436,14 @@ public class CGPropertyDefinition: CGFieldOrPropertyDefinition {
 			let method = CGMethodDefinition(`prefix`+Name, setStatements)
 			method.Parameters.Add(Parameters)
 			method.Parameters.Add(CGParameterDefinition(MAGIC_VALUE_PARAMETER_NAME, type))
+			method.Condition = Condition
 			return method
 		} else if let setExpression = SetExpression, let type = `Type` {
 			let method = CGMethodDefinition(`prefix`+Name)
 			method.Parameters.Add(Parameters)
 			method.Parameters.Add(CGParameterDefinition(MAGIC_VALUE_PARAMETER_NAME, type))
 			method.Statements.Add(CGAssignmentStatement(setExpression, CGLocalVariableAccessExpression(MAGIC_VALUE_PARAMETER_NAME)))
+			method.Condition = Condition
 			return method
 		}
 		return nil
@@ -363,6 +471,7 @@ public class CGEventDefinition: CGFieldLikeMemberDefinition {
 		if let addStatements = AddStatements, let type = `Type` {
 			let method = CGMethodDefinition("add__"+Name, addStatements)
 			method.Parameters.Add(CGParameterDefinition("___value", type))
+			method.Condition = Condition
 			return method
 		}
 		return nil
@@ -372,6 +481,7 @@ public class CGEventDefinition: CGFieldLikeMemberDefinition {
 		if let removeStatements = RemoveStatements, let type = `Type` {
 			let method = CGMethodDefinition("remove__"+Name, removeStatements)
 			method.Parameters.Add(CGParameterDefinition("___value", type))
+			method.Condition = Condition
 			return method
 		}
 		return nil
@@ -415,6 +525,8 @@ public class CGParameterDefinition : CGEntity {
 	public var Modifier: CGParameterModifierKind = .In
 	public var DefaultValue: CGExpression?
 	public var Attributes = List<CGAttribute>()
+	public var InlineAttributes = true
+	public var XmlDocumentation: CGXmlDocumentationStatement?
 
 	public init(_ name: String) {
 		Name = name
@@ -424,6 +536,20 @@ public class CGParameterDefinition : CGEntity {
 		Name = name
 		`Type` = type
 	}
+}
+
+/*
+https://www.php.net/manual/en/language.oop5.decon.php#example-300
+*/
+public enum CGPhpConstructorParameterVisibility {
+	case Unspecified
+	case Private
+	case Protected
+	case Public
+}
+
+public class CGPhpConstructorParameterDefinition : CGParameterDefinition {
+	public var Visibility: CGPhpConstructorParameterVisibility = .Unspecified
 }
 
 @Obsolete("Use CGParameterDefinition")
@@ -472,11 +598,12 @@ public enum CGGenericConstraintTypeKind {
 	case Interface
 }
 
-public class CGAttribute: CGEntity {
+public class CGAttribute: CGEntity, ICGHasCondition {
 	public var `Type`: CGTypeReference
 	public var Parameters: List<CGCallParameter>?
 	public var Comment: CGSingleLineCommentStatement?
 	public var Condition: CGConditionalDefine?
+	public var Scope: CGAttributeScopeKind?
 
 	public init(_ type: CGTypeReference) {
 		`Type` = type
@@ -488,4 +615,19 @@ public class CGAttribute: CGEntity {
 	public convenience init(_ type: CGTypeReference,_ parameters: CGCallParameter...) {
 		init(type, parameters.ToList())
 	}
+}
+
+public enum CGAttributeScopeKind {
+	case Assembly
+	case Module
+	case Global // Oxygene only
+	case Result
+	case Parameter
+	case Field
+	case Getter
+	case Setter
+	case Type // C# only
+	case Method // C# only
+	case Event // C# only
+	case Property // C# only
 }

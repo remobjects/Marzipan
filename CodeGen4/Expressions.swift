@@ -112,6 +112,11 @@ public class CGAnonymousMethodExpression: CGExpression {
 	public var ReturnType: CGTypeReference?
 	public var Statements: List<CGStatement>
 	public var LocalVariables: List<CGVariableDeclarationStatement>? // Legacy Delphi only.
+	// php: add possibility to use external variables.
+	// more info at
+	// - https://stackoverflow.com/questions/14138908/use-variables-inside-an-anonymous-function-which-is-defined-somewhere-else
+	// - https://www.php.net/manual/en/functions.anonymous.php
+	#warning "php: add possibility to use external variables"
 
 	public init(_ statements: List<CGStatement>) {
 		super.init()
@@ -180,6 +185,14 @@ public class CGAnonymousMethodMemberDefinition : CGAnonymousMemberDefinition{
 
 public class CGInheritedExpression: CGExpression {
 	public static lazy let Inherited = CGInheritedExpression()
+}
+
+public class CGMappedExpression: CGExpression {
+	public static lazy let Mapped = CGMappedExpression()
+}
+
+public class CGOldExpression: CGExpression {
+	public static lazy let Old = CGOldExpression()
 }
 
 public class CGIfThenElseExpression: CGExpression { // aka Ternary operator
@@ -268,6 +281,7 @@ public enum CGUnaryOperatorKind {
 	case Minus
 	case Not
 	case AddressOf
+	case AddressOfBlock
 	case ForceUnwrapNullable
 	case BitwiseNot
 }
@@ -330,6 +344,32 @@ public enum CGBinaryOperatorKind {
 	case AssignShr*/
 	case AddEvent
 	case RemoveEvent
+	case StrictEquals // ===
+	case StrictNotEquals // !==
+
+	#warning "add support for php operators"
+/*
+	https://www.w3schools.com/php/php_operators.asp
+	https://www.php.net/manual/en/language.operators.php
+
+	in php we have these operations in additional:
+
+	**      |Exponentiation |$x ** $y     |Result of raising $x to the $y'th power
+	===     |identical      |$x === $y    |Returns true if $x is equal to $y, and they are of the same type
+	!==     |not identical  |$x !== $y    |Returns true if $x is not equal to $y, or they are not of the same type
+	<=>     |spaceship      |$x <=> $y    |Returns an integer less than, equal to, or greater than zero, depending on
+										  |if $x is less than, equal to, or greater than $y.
+	.=      |Concatenation  |$x .= $y     |Appends $y to $x
+			|assignment     |
+	?:      |Ternary        |$x = expr1 ? expr2 : expr3     |Returns the value of $x.
+															|The value of $x is expr2 if expr1 = TRUE.
+															|The value of $x is expr3 if expr1 = FALSE
+	??      |Null coalescing|$x = expr1 ?? expr2    | Returns the value of $x.
+													| The value of $x is expr1 if expr1 exists, and is not NULL.
+													| If expr1 does not exist, or is NULL, the value of $x is expr2.
+
+	note: we currently don't use them in rodl cg4
+*/
 }
 
 
@@ -347,6 +387,10 @@ public class CGSelfExpression: CGExpression { // "self" or "this"
 	public static lazy let `Self` = CGSelfExpression()
 }
 
+public class CGResultExpression: CGExpression { // "result"
+	public static lazy let Result = CGResultExpression()
+}
+
 public class CGNilExpression: CGExpression { // "nil" or "null"
 	public static lazy let Nil = CGNilExpression()
 }
@@ -358,7 +402,7 @@ public class CGPropertyValueExpression: CGExpression { /* "value" or "newValue" 
 public class CGLiteralExpression: CGExpression {
 }
 
-public __abstract class CGLanguageAgnosticLiteralExpression: CGExpression {
+public __abstract class CGLanguageAgnosticLiteralExpression: CGLiteralExpression {
 	internal __abstract func StringRepresentation() -> String
 }
 
@@ -474,7 +518,8 @@ public class CGFloatLiteralExpression: CGLanguageAgnosticLiteralExpression {
 			case 10:
 				if let value = DoubleValue {
 					var result = Convert.ToStringInvariant(value)
-					if !result.Contains(".") {
+					let any: Char[] = [".", "E", "e"]
+					if !result.ContainsAny(any) {
 						result += ".0";
 					}
 					return result
@@ -616,6 +661,7 @@ public class CGNewInstanceExpression : CGExpression {
 	public var `Type`: CGExpression
 	public var ConstructorName: String? // can optionally be provided for languages that support named .ctors (Elements, Objectice-C, Swift)
 	public var Parameters: List<CGCallParameter>
+	public var GenericArguments: List<CGTypeReference>?
 	public var ArrayBounds: List<CGExpression>? // for array initialization.
 	public var PropertyInitializers = List<CGPropertyInitializer>() // for Oxygene and C# extended .ctor calls
 
@@ -660,6 +706,9 @@ public class CGLocalVariableAccessExpression : CGExpression {
 	}
 }
 
+public class CGParameterAccessExpression : CGLocalVariableAccessExpression {
+}
+
 public enum CGCallSiteKind {
 	case Unspecified
 	case Static
@@ -681,6 +730,12 @@ public __abstract class CGMemberAccessExpression : CGExpression {
 }
 
 public class CGFieldAccessExpression : CGMemberAccessExpression {
+}
+
+public class CGMethodAccessExpression : CGFieldAccessExpression {
+	// reference to getter/setter methods in properties
+	// should be generated w/o `(parameters)` part
+	// can be used in delphi and other places
 }
 
 public class CGEventAccessExpression : CGFieldAccessExpression {
@@ -770,5 +825,23 @@ public class CGArrayElementAccessExpression: CGExpression {
 	}
 	public convenience init(_ array: CGExpression, _ parameters: CGExpression...) {
 		init(array, parameters.ToList())
+	}
+}
+
+public class CGYieldExpression: CGExpression  {
+	public var Value: CGExpression
+
+	public init(_ value: CGExpression) {
+		Value = value
+	}
+}
+
+public class CGThrowExpression: CGExpression {
+	public var Exception: CGExpression?
+
+	public init() {
+	}
+	public init(_ exception: CGExpression?) {
+		Exception = exception
 	}
 }
