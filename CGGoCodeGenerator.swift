@@ -70,11 +70,11 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 	*/
 
 	override func generateForEachLoopStatement(_ statement: CGForEachLoopStatement) {
-		assert(false, "generateForEachLoopStatement catch blocks are not supported for Go")
+		assert(false, "for/each blocks are not supported for Go")
 	}
 
 	override func generateWhileDoLoopStatement(_ statement: CGWhileDoLoopStatement) {
-		assert(false, "generateWhileDoLoopStatement catch blocks are not supported for Go")
+		assert(false, "while/do blocks are not supported for Go")
 		//Append("while ")
 		//generateExpression(statement.Condition)
 		//AppendLine(" {")
@@ -85,7 +85,7 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateDoWhileLoopStatement(_ statement: CGDoWhileLoopStatement) {
-		assert(false, "generateDoWhileLoopStatement catch blocks are not supported for Go")
+		assert(false, "do/while blocks are not supported for Go")
 		//Append("repeat {")
 		//incIndent()
 		//generateStatementsSkippingOuterBeginEndBlock(statement.Statements)
@@ -169,7 +169,7 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 		}
 		generateStatements(statement.Statements)
 		if let catchBlocks = statement.CatchBlocks, catchBlocks.Count > 0 {
-			assert(false, "generateTryFinallyCatchStatement catch blocks are not supported for Go")
+			assert(false, "try/catch blocks are not supported for Go")
 			//for b in catchBlocks {
 				//if let name = b.Name, let type = b.Type {
 					//Append("__catch ")
@@ -194,23 +194,22 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 	}
 	*/
 
-	override func generateYieldStatement(_ statement: CGYieldStatement) {
+	override func generateYieldExpression(_ statement: CGYieldExpression) {
 		//if Dialect == CGGoCodeGeneratorDialect.Gold {
 			//Append("__yield ")
 			//generateExpression(statement.Value)
-			//AppendLine()
 		//} else {
 			assert(false, "generateYieldStatement is not supported for Go, except in Gold")
 		//}
 	}
 
-	override func generateThrowStatement(_ statement: CGThrowStatement) {
+	override func generateThrowExpression(_ statement: CGThrowExpression) {
 		if let value = statement.Exception {
 			Append("panic(")
 			generateExpression(value)
-			AppendLine(")")
+			Append(")")
 		} else {
-			AppendLine("panic()")
+			Append("panic()")
 		}
 	}
 
@@ -346,8 +345,15 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateInheritedExpression(_ expression: CGInheritedExpression) {
-		assert(false, "generateInheritedExpression is not supported for Go, except in Gold")
-		//Append("super")
+		assert(false, "generateInheritedExpression is not supported for Go")
+	}
+
+	override func generateMappedExpression(_ expression: CGMappedExpression) {
+		assert(false, "generateMappedExpression is not supported for Go")
+	}
+
+	override func generateOldExpression(_ expression: CGOldExpression) {
+		assert(false, "generateOldExpression is not supported for Go")
 	}
 
 	override func generateSelfExpression(_ expression: CGSelfExpression) {
@@ -740,6 +746,7 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 
 	override func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		Append("@")
+		generateAttributeScope(attribute)
 		generateTypeReference(attribute.`Type`, ignoreNullability: true)
 		if let parameters = attribute.Parameters, parameters.Count > 0 {
 			Append("(")
@@ -840,7 +847,11 @@ public class CGGoCodeGenerator : CGCStyleCodeGenerator {
 	}
 
 	override func generateAliasType(_ type: CGTypeAliasDefinition) {
-		assert(false, "generateAliasType is not supported for Go")
+		Append("type ")
+		generateIdentifier(type.Name)
+		Append(" = ")
+		generateTypeReference(type.ActualType)
+		AppendLine()
 	}
 
 	override func generateBlockType(_ block: CGBlockTypeDefinition) {

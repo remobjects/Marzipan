@@ -29,55 +29,92 @@
 		"reintroduce", "repeat", "resourcestring", "result", "safecall", "saveregisters", "self", "set", "shl", "shr", "softfloat",
 		"specialize", "static", "stdcall", "stored", "strict", "string", "then", "threadvar", "to", "true", "try", "type", "unaligned",
 		"unimplemented", "unit", "until", "uses", "var", "varargs", "virtual", "while", "with", "write", "xor"].ToList() as! List<String>
-	}
-
-	public var Version: Integer = 7
-
-	public convenience init(version: Integer) {
-		init()
-		Version = version
+		splitLinesLongerThan = 200;
 	}
 
 	override func escapeIdentifier(_ name: String) -> String {
-		if Version > 9 {
-			return super.escapeIdentifier(name)
+		if self.Dialect == .Delphi2009 {
+			return "&\(name)"
 		} else {
 			return name
 		}
 	}
 
-	override func generateHeader() {
-		Append("unit ")
-		if let fileName = currentUnit.FileName {
-			Append(fileName)
-		} else if let namespace = currentUnit.Namespace {
-			generateIdentifier(namespace.Name, alwaysEmitNamespace: true)
-		} else {
-			Append("{unit name unknown}")
-		}
-		AppendLine(";")
-		AppendLine()
-		super.generateHeader()
-	}
+	//override func generateHeader() {
+		//Append("unit ")
+		//if let fileName = currentUnit.FileName {
+			//Append(fileName)
+		//} else if let namespace = currentUnit.Namespace {
+			//generateIdentifier(namespace.Name, alwaysEmitNamespace: true)
+		//} else {
+			//Append("{unit name unknown}")
+		//}
+		//AppendLine(";")
+		//AppendLine()
+		//super.generateHeader()
+	//}
 
 	internal func generateForwards(_ Types : List<CGTypeDefinition>) {
 		if Types.Count > 0 {
 			AppendLine("{ Forward declarations }")
 			var t = List<CGTypeDefinition>()
 			t.Add(Types)
-			if AlphaSortImplementationMembers {
-				t.Sort({return $0.Name.CompareTo/*IgnoreCase*/($1.Name)})
-			}
+			var list = List<CGTypeDefinition>()
 			for type in t {
 				if let type = type as? CGInterfaceTypeDefinition {
-					AppendLine(type.Name + " = interface;")
+					list.Add(type)
+				} else if let type = type as? CGClassTypeDefinition {
+					list.Add(type)
+				}
+			}
+			// split types by used conditions:
+			// no condition => otherlist
+			// condition => dict
+			var dict = Dictionary<CGConditionalDefine, List<CGTypeDefinition>>()
+			let otherlist = List<CGTypeDefinition>()
+			for index in (0 ..< list.Count) {
+				if let type = list[index] {
+					if let cond = type.Condition {
+						var l_detected: CGConditionalDefine? = nil
+						for index1 in (0 ..< dict.Keys.Count()) {
+							if let cond2 = dict.Keys.Item[index1] {
+								if compareCondition(cond2, cond) {
+									l_detected = cond2
+									break
+								}
+							}
+						}
+						if l_detected != nil {
+							dict[l_detected]!.Add(type)
+						} else {
+							dict.Add(cond, [type].ToList())
+						}
+					} else {
+						otherlist.Add(type)
+					}
 				}
 			}
 
-			for type in t {
-				if let type = type as? CGClassTypeDefinition {
+			otherlist.Sort({return $0.Name.CompareTo/*IgnoreCase*/($1.Name)})
+			for it in dict {
+				it.Value.Sort({return $0.Name.CompareTo/*IgnoreCase*/($1.Name)})
+			}
+
+			for it in dict {
+				for t in it.Value {
+					t.Condition = it.Key
+				}
+				otherlist.Add(it.Value)
+			}
+
+			for index in (0 ..< otherlist.Count) {
+				generateConditionStart(otherlist, index)
+				if let type = otherlist[index] as? CGInterfaceTypeDefinition {
+					AppendLine(type.Name + " = interface;")
+				} else if let type = otherlist[index] as? CGClassTypeDefinition {
 					AppendLine(type.Name + " = class;")
 				}
+				generateConditionEnd(otherlist, index)
 			}
 			AppendLine()
 		}
@@ -100,7 +137,59 @@
 	}
 
 	override func pascalGenerateMemberVisibilityKeyword(_ visibility: CGMemberVisibilityKind) {
-		if Version > 11 {
+		/* https://docwiki.embarcadero.com/RADStudio/Sydney/en/Classes_and_Objects_(Delphi)
+
+			#Private, Protected, and Public Members
+
+			A private member is invisible outside of the unit or program where its class is declared. In other words, a private method
+			cannot be called from another module, and a private field or property cannot be read or written to from another module.
+			By placing related class declarations in the same module, you can give each class access to the private members of another
+			class without making those members more widely accessible. For a member to be visible only inside its class, it needs to be
+			declared strict private.
+
+			A protected member is visible anywhere in the module where its class is declared and from any descendent class, regardless of
+			the module where the descendent class appears. A protected method can be called, and a protected field or property read or
+			written to, from the definition of any method belonging to a class that descends from the one where the protected member is
+			declared. Members that are intended for use only in the implementation of derived classes are usually protected.
+
+			A public member is visible wherever its class can be referenced.
+
+			#Strict Visibility Specifiers
+
+			In addition to private and protected visibility specifiers, the Delphi compiler supports additional visibility settings with
+			greater access constraints. These settings are strict private and strict protected visibility.
+
+			Class members with strict private visibility are accessible only within the class in which they are declared. They are not
+			visible to procedures or functions declared within the same unit. Class members with strict protected visibility are visible
+			within the class in which they are declared, and within any descendent class, regardless of where it is declared. Furthermore,
+			when instance members (those declared without the class or class var keywords) are declared strict private or strict protected,
+			they are inaccessible outside of the instance of a class in which they appear. An instance of a class cannot access strict private
+			or strict protected instance members in other instances of the same class.
+
+			#Published Members
+
+			Published members have the same visibility as public members. The difference is that run-time type information (RTTI) is generated
+			for published members. RTTI allows an application to query the fields and properties of an object dynamically and to locate its methods.
+			RTTI is used to access the values of properties when saving and loading form files, to display properties in the Object Inspector, and
+			to associate specific methods (called event handlers) with specific properties (called events).
+
+			Published properties are restricted to certain data types. Ordinal, string, class, interface, variant, and method-pointer types can be
+			published. So can set types, provided the upper and lower bounds of the base type have ordinal values from 0 through 31. (In other words,
+			the set must fit in a byte, word, or double word.) Any real type except Real48 can be published. Properties of an array type (as distinct
+			from array properties, discussed below) cannot be published.
+
+			Some properties, although publishable, are not fully supported by the streaming system. These include properties of record types, array
+			properties of all publishable types, and properties of enumerated types that include anonymous values. If you publish a property of this
+			kind, the Object Inspector will not display it correctly, nor will the property's value be preserved when objects are streamed to disk.
+
+			All methods are publishable, but a class cannot publish two or more overloaded methods with the same name. Fields can be published only
+			if they are of a class or interface type.
+
+			A class cannot have published members unless it is compiled in the {$M+} state or descends from a class compiled in the {$M+} state.
+			Most classes with published members derive from Classes.TPersistent, which is compiled in the {$M+} state, so it is seldom necessary
+			to use the $M directive.
+		*/
+		if Dialect == .Delphi2009 {
 			switch visibility {
 				case .Unspecified: break /* no-op */
 				case .Private: Append("strict private")
@@ -121,9 +210,9 @@
 				case .Unit: Append("private")
 				case .UnitAndProtected: fallthrough
 				case .AssemblyAndProtected: fallthrough
-				case .Protected: Append("protected")
 				case .UnitOrProtected: fallthrough
 				case .AssemblyOrProtected: fallthrough
+				case .Protected: Append("protected")
 				case .Assembly: fallthrough
 				case .Published: Append("published")
 				case .Public: Append("public")
@@ -151,6 +240,51 @@
 	// Type Definitions
 	//
 
+	override func pascalGenerateImplementedInterface(_ member: CGMemberDefinition) {
+		if let implementsInterface = member.ImplementsInterface, member.ImplementsInterfaceMember == nil {
+			Append(" implements ")
+			generateTypeReference(implementsInterface)
+			Append(";")
+		}
+	}
+
+	override func pascalGenerateImplementedInterfaceMethodResolution(_ member: CGMethodDefinition, type: CGTypeDefinition) {
+		if let implementsInterface = member.ImplementsInterface, let implementsInterfaceMember = member.ImplementsInterfaceMember {
+			Append(pascalKeywordForMethod(member))
+			Append(" ")
+			generateTypeReference(implementsInterface, ignoreNullability: true)
+			Append(".")
+			generateIdentifier(implementsInterfaceMember)
+			Append(" = ")
+			generateIdentifier(member.Name)
+			AppendLine(";")
+		}
+	}
+
+	override func pascalGenerateDeprecated(_ message: String?) {
+		Append(" deprecated")
+		if IsDelphi2009 {
+			if let message = message, length(message) > 0 {
+				Append(" '\(message.FirstLine)'")
+			}
+		} else if IsStandard {
+			// Delphi 7 doesn't support messages, so we can use includes from eDefines.inc
+			if let message = message, length(message) > 0 {
+				Append(" {$IFDEF DELPHI2009UP}'\(message.FirstLine)'{$ENDIF}")
+			}
+		}
+	}
+
+	override func generateClassTypeEnd(_ type: CGClassTypeDefinition) {
+		decIndent()
+		Append("end")
+		if type.Deprecated {
+			pascalGenerateDeprecated(type.DeprecationMessage)
+		}
+		generateStatementTerminator()
+		pascalGenerateNestedTypes(type)
+	}
+
 	override func generateExtensionTypeStart(_ type: CGExtensionTypeDefinition) {
 		generateIdentifier(type.Name)
 		pascalGenerateGenericParameters(type.GenericParameters)
@@ -166,14 +300,15 @@
 	}
 
 	override func generateAll() {
+		generateHeader()
+		generateDirectives()
 		if !definitionOnly {
-			generateHeader()
-			generateDirectives()
 			AppendLine("interface")
 			AppendLine()
-			pascalGenerateImports(currentUnit.Imports)
-			delphiGenerateGlobalInterfaceVariables()
 		}
+		generateAttributes()
+		pascalGenerateImports(currentUnit.Imports)
+		delphiGenerateGlobalInterfaceVariables()
 		delphiGenerateInterfaceTypeDefinition()
 		if !definitionOnly {
 			delphiGenerateGlobalInterfaceMethods()
@@ -190,8 +325,8 @@
 
 	final func delphiGenerateImplementationDirectives() {
 		if currentUnit.ImplementationDirectives.Count > 0 {
-			for d in currentUnit.ImplementationDirectives {
-				generateDirective(d)
+			for index in (0 ..< currentUnit.ImplementationDirectives.Count) {
+				generateDirective(currentUnit.ImplementationDirectives, index)
 			}
 			AppendLine()
 		}
@@ -201,76 +336,69 @@
 	final func delphiGenerateGlobalImplementations() {
 		// step1: generate global consts and vars
 		needCR = false;
+		var list = List<CGGlobalDefinition>()
 		for g in currentUnit.Globals {
 			if let global = g as? CGGlobalVariableDefinition {
 				if (global.Variable.Visibility == .Private)||(global.Variable.Visibility == .Unit)  {
-					generateTypeMember(global.Variable, type: CGGlobalTypeDefinition.GlobalType)
-					needCR = true;
+					list.Add(global)
 				}
-			}
-			else if let global = g as? CGGlobalFunctionDefinition {
+			} else if let global = g as? CGGlobalFunctionDefinition {
 				// will be processed at step2
-			}
-			else if let global = g as? CGGlobalPropertyDefinition {
+			} else if let global = g as? CGGlobalPropertyDefinition {
 				// skip global properties
-				Append("// global proerties are not supported.")
-			}
-			else {
+				Append("// global properties are not supported.")
+			} else {
 				assert(false, "unsupported global found: \(typeOf(g).ToString())")
 			}
 		}
+
+		for index in (0 ..< list.Count) {
+			generateGlobal(list, index)
+			needCR = true;
+		}
+
 		if needCR {    AppendLine();}
+
 		// step2: generate global methods
-		for g in currentUnit.Globals {
-			if let global = g as? CGGlobalVariableDefinition {
-				// already processed in step1
-			}
-			else if let global = g as? CGGlobalFunctionDefinition {
-				pascalGenerateMethodImplementation(global.Function, type: CGGlobalTypeDefinition.GlobalType)
-			}
-			else if let global = g as? CGGlobalPropertyDefinition {
-				// skip global properties
-				Append("// global proerties are not supported.")
-			}
-			else {
-				assert(false, "unsupported global found: \(typeOf(g).ToString())")
-			}
-		}
+		pascalGenerateGlobalImplementations()
 	}
 
 	final func delphiGenerateGlobalInterfaceVariables() {
 		// generate global consts and vars
-		needCR = false;
+		var list = List<CGGlobalDefinition>();
 		for g in currentUnit.Globals {
 			if let global = g as? CGGlobalVariableDefinition {
 				if global.Variable.Visibility != CGMemberVisibilityKind.Private {
-					generateTypeMember(global.Variable, type: CGGlobalTypeDefinition.GlobalType)
-					needCR = true;
+					list.Add(global)
 				}
-			}
-			else if let global = g as? CGGlobalFunctionDefinition {
+			} else if let global = g as? CGGlobalFunctionDefinition {
 				// will be processed in delphiGenerateGlobalInterfaceMethods
-			}
-			   else {
+			} else {
 				assert(false, "unsupported global found: \(typeOf(g).ToString())")
 			}
+		}
+		for index in (0 ..< list.Count) {
+			generateGlobal(list, index)
 		}
 	}
 
 	final func delphiGenerateGlobalInterfaceMethods() {
 		// generate global methods
+		var list = List<CGGlobalDefinition>()
 		for g in currentUnit.Globals {
 			if let global = g as? CGGlobalVariableDefinition {
 				// already processed in delphiGenerateGlobalInterfaceVariables
-			}
-			else if let global = g as? CGGlobalFunctionDefinition {
+			} else if let global = g as? CGGlobalFunctionDefinition {
 				if global.Function.Visibility != CGMemberVisibilityKind.Private {
-					generateTypeMember(global.Function, type: CGGlobalTypeDefinition.GlobalType)
+					list.Add(global)
 				}
-			}
-			else {
+			} else {
 				assert(false, "unsupported global found: \(typeOf(g).ToString())")
 			}
+		}
+
+		for index in (0 ..< list.Count) {
+			generateGlobal(list, index)
 		}
 
 	}
@@ -310,21 +438,6 @@
 		}
 	}
 
-	override func generateForToLoopStatement(_ statement: CGForToLoopStatement) {
-		Append("for ")
-		generateIdentifier(statement.LoopVariableName)
-		Append(" := ")
-		generateExpression(statement.StartValue)
-		if statement.Direction == CGLoopDirectionKind.Forward {
-			Append(" to ")
-		} else {
-			Append(" downto ")
-		}
-		generateExpression(statement.EndValue)
-		Append(" do")
-		generateStatementIndentedOrTrailingIfItsABeginEndBlock(statement.NestedStatement)
-	}
-
 	override func generateSelfExpression(_ expression: CGSelfExpression) {
 		Append("Self")
 	}
@@ -359,28 +472,29 @@
 		}
 	}
 
-	override func generateEnumType(_ type: CGEnumTypeDefinition) {
-		generateIdentifier(type.Name)
-		Append(" = ")
-		Append("(")
-		helpGenerateCommaSeparatedList(type.Members) { m in
-			if let member = m as? CGEnumValueDefinition {
-				self.generateAttributes(member.Attributes, inline: true)
-				self.generateIdentifier(member.Name)
-				if let value = member.Value {
-					self.Append(" = ")
-					self.generateExpression(value)
-				}
-			}
-		}
+	//override func generateEnumType(_ type: CGEnumTypeDefinition) {
+		//generateIdentifier(type.Name)
+		//Append(" = ")
+		//Append("(")
+		//helpGenerateCommaSeparatedList(type.Members, wrapAlways: wrapEnums) { m in
+			//if let member = m as? CGEnumValueDefinition {
+				//self.generateXmlDocumentationStatement(member.XmlDocumentation)
+				//self.generateAttributes(member.Attributes, inline: true)
+				//self.generateIdentifier(member.Name)
+				//if let value = member.Value {
+					//self.Append(" = ")
+					//self.generateExpression(value)
+				//}
+			//}
+		//}
 
-		Append(")")
-		if let baseType = type.BaseType {
-			Append(" of ")
-			generateTypeReference(baseType)
-		}
-		generateStatementTerminator()
-	}
+		//Append(")")
+		//if let baseType = type.BaseType {
+			//Append(" of ")
+			//generateTypeReference(baseType)
+		//}
+		//generateStatementTerminator()
+	//}
 
 	override func generateInterfaceTypeStart(_ type: CGInterfaceTypeDefinition) {
 		generateIdentifier(type.Name)
@@ -520,54 +634,6 @@
 //        }
 //    }
 
-	override func generateSwitchStatement(_ statement: CGSwitchStatement) {
-		Append("case ")
-		generateExpression(statement.Expression)
-		AppendLine(" of")
-		incIndent()
-		for c in statement.Cases {
-			helpGenerateCommaSeparatedList(c.CaseExpressions) {
-				self.generateExpression($0)
-			}
-			Append(": ")
-			var b = false;
-//            if (c.Statements.Count == 1) && !(c.Statements[0] is CGBeginEndBlockStatement) { b = true}
-			if b {
-				/*optimization: generate code like
-					case x of
-						x:  single_line_statement;
-					instead of
-					case x of
-						x: begin
-							 single_line_statement;
-						end;
-				*/
-				generateStatementSkippingOuterBeginEndBlock(c.Statements[0])
-			}
-			else {
-				AppendLine("begin")
-				incIndent()
-				incIndent()
-				generateStatementsSkippingOuterBeginEndBlock(c.Statements)
-				decIndent()
-				Append("end")
-				generateStatementTerminator()
-				decIndent()
-			}
-		}
-		if let defaultStatements = statement.DefaultCase, defaultStatements.Count > 0 {
-			AppendLine("else begin")
-			incIndent()
-			generateStatementsSkippingOuterBeginEndBlock(defaultStatements)
-			decIndent()
-			Append("end")
-			generateStatementTerminator()
-		}
-		decIndent()
-		Append("end")
-		generateStatementTerminator()
-	}
-
 	override func generateTryFinallyCatchStatement(_ statement: CGTryFinallyCatchStatement) {
 		if let finallyStatements = statement.FinallyStatements, finallyStatements.Count > 0 {
 			AppendLine("try")
@@ -592,10 +658,12 @@
 			AppendLine("except")
 			incIndent()
 			for b in catchBlocks {
-				if let name = b.Name, let type = b.`Type` {
+				if let type = b.`Type` {
 					Append("on ")
-					generateIdentifier(name)
-					Append(": ")
+					if let name = b.Name {
+						generateIdentifier(name)
+						Append(": ")
+					}
 					generateTypeReference(type)
 					Append(" do ")
 					var b1 = false;
@@ -606,8 +674,7 @@
 						incIndent()
 						generateStatementSkippingOuterBeginEndBlock(b.Statements[0])
 						decIndent()
-					}
-					else {
+					} else {
 						AppendLine("begin")
 						incIndent()
 						generateStatements(b.Statements)
@@ -638,12 +705,12 @@
 			case .UInt32: Append("Cardinal")
 			case .Int64: Append("Int64")
 			case .UInt64: Append("UInt64")
-			case .IntPtr: Append("")
-			case .UIntPtr: Append("")
+			case .IntPtr: Append("IntPtr")
+			case .UIntPtr: Append("UIntPtr")
 			case .Single: Append("Single")
 			case .Double: Append("Double")
 			case .Boolean: Append("Boolean")
-			case .String: Append("String")
+			case .String: Append("string")
 			case .AnsiChar: Append("AnsiChar")
 			case .UTF16Char: Append("")
 			case .UTF32Char: Append("")
@@ -655,12 +722,30 @@
 		}
 	}
 
-	override func generateCharacterLiteralExpression(_ expression: CGCharacterLiteralExpression) {
-		var x = expression.Value as! UInt32;
-		if (x >= 32) && (x < 127) {
-			Append("'"+expression.Value+"'");
-		} else {
-			super.generateCharacterLiteralExpression(expression);
+	//override func generateCharacterLiteralExpression(_ expression: CGCharacterLiteralExpression) {
+		//var x = ord(expression.Value)
+		//if (x >= 32) && (x < 127) {
+			//Append("'"+expression.Value+"'");
+		//} else {
+			//super.generateCharacterLiteralExpression(expression);
+		//}
+	//}
+
+	override func pascalGenerateCallSiteForExpression(_ expression: CGMemberAccessExpression) -> Boolean {
+		if let callSite = expression.CallSite {
+			generateExpression(callSite)
+			if callSite is CGInheritedExpression {
+				Append(" ")
+			} else {
+				if (expression.Name != "") {
+					Append(".")
+				}
+			}
 		}
+		return true
+	}
+
+	override func generateOldExpression(_ expression: CGOldExpression) {
+		assert(false, "generateOldExpression not implemented")
 	}
 }

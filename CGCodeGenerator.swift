@@ -4,11 +4,13 @@
 	internal var tabSize = 2
 	internal var useTabs = false
 	internal var definitionOnly = false
+	internal final var StatementTerminator = ";"
 
 	internal var keywords: List<String>?
 	internal var keywordsAreCaseSensitive = true // keywords List must be lowercase when this is set to false
 
 	internal var codeCompletionMode = false
+	internal var combineConditions = true /* debug option */
 
 	override public init() {
 	}
@@ -21,12 +23,22 @@
 
 	public var omitNamespacePrefixes: Boolean = false
 	public var splitLinesLongerThan: Integer = 2048
+	public var preserveUnicodeCharactersInStringLiterals: Boolean = false
+	public var wrapEnums: Boolean = false
 
 	public final func GenerateUnit(_ unit: CGCodeUnit) -> String { // overload for VC# compastibility
 		return GenerateUnit(unit, definitionOnly: false)
 	}
 
 	public final func GenerateUnit(_ unit: CGCodeUnit, definitionOnly: Boolean /*= false*/) -> String {
+		// extra initialization
+		indent = 0
+		atStart = true
+		isNewLine = true
+		currentLocation.column = 0
+		currentLocation.virtualColumn = 0
+		currentLocation.offset = 0
+		// end extra initialization
 
 		currentUnit = unit
 		currentCode = StringBuilder()
@@ -36,6 +48,18 @@
 		return currentCode.ToString()
 	}
 
+	// VB uses different order: Directives, Import, Header
+	internal func generateType(_ type: CGTypeDefinition) {
+		generateHeader()
+		generateDirectives()
+		generateImports()
+		if type is CGGlobalTypeDefinition {
+			generateGlobals()
+		} else {
+			generateTypeDefinition(type)
+		}
+		generateFooter()
+	}
 	//
 	// Additional public APIs used by IDE Smarts & Co
 	//
@@ -46,15 +70,7 @@
 		currentCode = StringBuilder()
 		definitionOnly = false
 
-		generateHeader()
-		generateDirectives()
-		generateImports()
-		if type is CGGlobalTypeDefinition {
-			generateGlobals()
-		} else {
-			generateTypeDefinition(type)
-		}
-		generateFooter()
+		generateType(type)
 
 		return currentCode.ToString()
 	}
@@ -156,6 +172,7 @@
 		generateImports()
 		generateForwards()
 		generateGlobals()
+		generateAttributes()
 		generateTypeDefinitions()
 		generateFooter()
 	}
@@ -192,6 +209,15 @@
 
 	internal func generateHeader() {
 		// descendant can override, if needed
+
+		if let rawHeader = currentUnit.RawHeader, rawHeader.Count > 0 {
+			AppendLine()
+			for s in rawHeader {
+				AppendLine(s)
+			}
+			AppendLine()
+		}
+
 		if let comment = currentUnit.HeaderComment, comment.Lines.Count > 0 {
 			generateStatement(comment)
 			AppendLine()
@@ -200,6 +226,14 @@
 
 	internal func generateFooter() {
 		// descendant can override, if needed
+
+		if let rawHFooter = currentUnit.RawFooter, rawHFooter.Count > 0 {
+			AppendLine()
+			for s in rawHFooter {
+				AppendLine(s)
+			}
+			AppendLine()
+		}
 	}
 
 	internal func generateForwards() {
@@ -208,35 +242,70 @@
 
 	internal func generateDirectives() {
 		if currentUnit.Directives.Count > 0 {
-			for d in currentUnit.Directives {
-				generateDirective(d)
+			for index in (0 ..< currentUnit.Directives.Count) {
+				generateDirective(currentUnit.Directives, index)
 			}
 			AppendLine()
 		}
 	}
 
+	internal func compareCondition(_ a: CGConditionalDefine?,_ b: CGConditionalDefine?) -> Boolean {
+		if (a == nil) || (b == nil) {
+			return false
+		}
+		if (a == b) {
+			return true
+		}
+
+		var oldstate = SaveState()
+		__try
+		{
+			var s1: String! = nil
+			var s2: String! = nil
+
+			if let a = a as? CGConditionalDefine {
+				s1 = ExpressionToString(a.Expression)
+			}
+			if let b = b as? CGConditionalDefine {
+				s2 = ExpressionToString(b.Expression)
+			}
+
+			if String.IsNullOrEmpty(s1) || String.IsNullOrEmpty(s2) {
+				return false;
+			}
+
+			return s1.CompareTo(s2) == 0;
+		}
+		__finally
+		{
+			RestoreState(oldstate)
+		}
+	}
+
+	internal func SameCondition<T>(_ list: List<T>,_ index: Int32) -> Boolean {
+		if !combineConditions {
+			return false
+		}
+		// 1st item or last item
+		if (index == -1) || (index == list.Count - 1) {
+			return false
+		}
+		var a: CGConditionalDefine? = (list[index] as! ICGHasCondition).Condition
+		var b: CGConditionalDefine? = (list[index + 1] as! ICGHasCondition).Condition
+		return compareCondition(a, b)
+	}
+
+
 	internal func generateImports() {
 		if currentUnit.Imports.Count > 0 {
-			for i in currentUnit.Imports {
-				if let condition = i.Condition {
-					generateConditionStart(condition)
-				}
-				generateImport(i)
-				if let condition = i.Condition {
-					generateConditionEnd(condition)
-				}
+			for index in (0 ..< currentUnit.Imports.Count) {
+				generateImport(currentUnit.Imports, index)
 			}
 			AppendLine()
 		}
 		if currentUnit.FileImports.Count > 0 {
-			for i in currentUnit.FileImports {
-				if let condition = i.Condition {
-					generateConditionStart(condition)
-				}
-				generateFileImport(i)
-				if let condition = i.Condition {
-					generateConditionEnd(condition)
-				}
+			for index in (0 ..< currentUnit.FileImports.Count) {
+				generateFileImport(currentUnit.FileImports, index)
 			}
 			AppendLine()
 		}
@@ -249,8 +318,8 @@
 
 	internal func generateTypeDefinitions(_ Types : List<CGTypeDefinition>) {
 		// descendant should not usually override
-		for t in Types {
-			generateTypeDefinition(t)
+		for index in (0 ..< Types.Count) {
+			generateTypeDefinition(Types, index)
 			AppendLine()
 		}
 	}
@@ -258,27 +327,45 @@
 	internal func generateGlobals() {
 
 		var lastGlobal: CGGlobalDefinition? = nil
-		for g in currentUnit.Globals {
+		for index in (0 ..< currentUnit.Globals.Count) {
+			var g = currentUnit.Globals[index]
 			if let lastGlobal = lastGlobal, globalNeedsSpace(g, afterGlobal: lastGlobal) {
 				AppendLine()
 			}
-			generateGlobal(g)
-			lastGlobal = g;
+			generateGlobal(currentUnit.Globals, index)
+			lastGlobal = g
 		}
 		if lastGlobal != nil {
 			AppendLine()
 		}
 	}
 
-	internal final func generateDirective(_ directive: CGCompilerDirective) {
+	internal func generateAttributes() {
+
+		var hadAttributes = false
+		for index in (0 ..< currentUnit.Attributes.Count) {
+			generateAttribute(currentUnit.Attributes, index)
+			hadAttributes = true
+		}
+		if hadAttributes {
+			AppendLine()
+		}
+	}
+
+	internal final func generateDirective(_ list: List<CGCompilerDirective>, _ index: Integer) {
+		var directive = list[index]
 		if let condition = directive.Condition {
-			generateConditionStart(condition)
-			incIndent()
+			if !SameCondition(list, index - 1) {
+				generateConditionStart(condition)
+				incIndent()
+			}
 		}
 		AppendLine(directive.Directive)
 		if let condition = directive.Condition {
-			decIndent()
-			generateConditionEnd(condition)
+			if !SameCondition(currentUnit.Imports, index) {
+				decIndent()
+				generateConditionEnd(condition)
+			}
 		}
 	}
 
@@ -287,13 +374,33 @@
 		Append("// ")
 	}
 
+	internal func generateXmlDocumentationPrefix() {
+		// descendant may override, but this will work for all current languages we support.
+		Append("/// ")
+	}
+
 	internal func generateImport(_ `import`: CGImport) {
 		// descendant must override this or generateImports()
 		assert(false, "generateImport not implemented")
 	}
 
+	internal final func generateImport(_ list: List<CGImport>,_ index: Integer) {
+		var i = list[index]
+		generateConditionStart(list, index)
+		generateImport(i)
+		generateConditionEnd(list, index)
+	}
+
+
 	internal func generateFileImport(_ `import`: CGImport) {
 		// descendant should override if it supports file imports
+	}
+
+	internal final func generateFileImport(_ list: List<CGImport>,_ index: Integer) {
+		var i = list[index]
+		generateConditionStart(list, index)
+		generateFileImport(i)
+		generateConditionEnd(list, index)
 	}
 
 	//
@@ -301,26 +408,29 @@
 	//
 
 	internal func memberNeedsSpace(_ member: CGMemberDefinition, afterMember lastMember: CGMemberDefinition) -> Boolean {
+		if typeOf(member) != typeOf(lastMember) {
+			return true
+		}
 		if memberIsSingleLine(member) && memberIsSingleLine(lastMember) {
-			return false;
+			return false
 		}
 		return true
 	}
 
 	internal func globalNeedsSpace(_ global: CGGlobalDefinition, afterGlobal lastGlobal: CGGlobalDefinition) -> Boolean {
 		if globalIsSingleLine(global) && globalIsSingleLine(lastGlobal) {
-			return false;
+			return false
 		}
 		return true
 	}
 
 	internal func memberIsSingleLine(_ member: CGMemberDefinition) -> Boolean {
-		// reasoablew default, works for al current languages
+		// reasonable default, works for all current languages
 		if member is CGFieldDefinition {
 			return true
 		}
 		if let property = member as? CGPropertyDefinition {
-			return property.GetStatements == nil && property.SetStatements == nil && property.GetExpression == nil && property.SetExpression == nil
+			return !property.HasGetterMethod && !property.HasSetterMethod
 		}
 		return false
 	}
@@ -368,9 +478,9 @@
 		}
 
 		if let keywords = keywords {
-			if name.Contains(".") {
+			if name.Contains(".") && !name.Contains("..") {
 				let parts = name.Split(".")
-				helpGenerateCommaSeparatedList(parts, separator: { self.Append(".") }, wrapWhenItExceedsLineLength: false, callback: { part in self.generateIdentifier(part, escaped: true) })
+				helpGenerateCommaSeparatedList(parts, separator: { self.Append(".") }, wrapMode: WrapMode.Never, callback: { part in self.generateIdentifier(part, escaped: true) })
 			} else {
 				var checkName = name
 				if !keywordsAreCaseSensitive {
@@ -394,6 +504,23 @@
 	}
 
 	//
+	// Invariants
+	//
+
+	internal open var invariantCommentSeparator: String { " : " }
+
+	internal final func generateInvariantExpressions(_ expressions: List<CGInvariant>) {
+		for g in expressions {
+			generateExpression(g.Expression)
+			if let message = g.Message, length(message) > 0 {
+				Append(invariantCommentSeparator)
+				generateStringLiteralExpression(message.AsLiteralExpression())
+			}
+			generateStatementTerminator()
+		}
+	}
+
+	//
 	// Statements
 	//
 
@@ -407,8 +534,10 @@
 	internal final func generateStatements(variables statements: List<CGVariableDeclarationStatement>?) {
 		// descendant should not override
 		if let statements = statements {
-			for g in statements {
-				generateStatement(g)
+			for index in (0 ..< statements.Count) {
+				generateConditionStart(statements, index)
+				generateStatement(statements[index])
+				generateConditionEnd(statements, index)
 			}
 		}
 	}
@@ -465,10 +594,14 @@
 
 	internal final func generateStatement(_ statement: CGStatement) {
 
-		statement.startLocation = currentLocation;
+		statement.startLocation = currentLocation
 
 		// descendant should not override
-		if let commentStatement = statement as? CGCommentStatement {
+		if let commentStatement = statement as? CGJSTagDocumentationStatement {
+			generateJSTagDocumentationStatement(commentStatement)
+		} else if let commentStatement = statement as? CGXmlDocumentationStatement {
+			generateXmlDocumentationStatement(commentStatement)
+		} else if let commentStatement = statement as? CGCommentStatement {
 			generateCommentStatement(commentStatement)
 		} else if let commentStatement = statement as? CGSingleLineCommentStatement {
 			generateSingleLineCommentStatement(commentStatement)
@@ -502,22 +635,26 @@
 			generateUsingStatement(statement)
 		} else if let statement = statement as? CGAutoReleasePoolStatement {
 			generateAutoReleasePoolStatement(statement)
+		} else if let statement = statement as? CGCheckedStatement {
+			generateCheckedStatement(statement)
+		} else if let statement = statement as? CGCUnsafeStatement {
+			generateUnsafeStatement(statement)
 		} else if let statement = statement as? CGTryFinallyCatchStatement {
 			generateTryFinallyCatchStatement(statement)
 		} else if let statement = statement as? CGReturnStatement {
 			generateReturnStatement(statement)
-		} else if let statement = statement as? CGYieldStatement {
-			generateYieldStatement(statement)
-		} else if let statement = statement as? CGThrowStatement {
-			generateThrowStatement(statement)
 		} else if let statement = statement as? CGBreakStatement {
 			generateBreakStatement(statement)
 		} else if let statement = statement as? CGContinueStatement {
 			generateContinueStatement(statement)
+		} else if let statement = statement as? CGFallThroughStatement {
+			generateFallThroughStatement(statement)
 		} else if let statement = statement as? CGVariableDeclarationStatement {
 			generateVariableDeclarationStatement(statement)
 		} else if let statement = statement as? CGAssignmentStatement {
 			generateAssignmentStatement(statement)
+		} else if let statement = statement as? CGLocalTypeDeclarationStatement {
+			generateLocalTypeDeclarationStatement(statement)
 		} else if let statement = statement as? CGConstructorCallStatement {
 			generateConstructorCallStatement(statement)
 		} else if let statement = statement as? CGEmptyStatement {
@@ -526,6 +663,8 @@
 			generateGotoStatement(expression)
 		} else if let expression = statement as? CGLabelStatement {
 			generateLabelStatement(expression)
+		} else if let expression = statement as? CGLocalMethodStatement {
+			generateLocalMethodStatement(expression)
 		} else if let expression = statement as? CGExpression { // should be last but one
 			generateExpressionStatement(expression)
 		}
@@ -534,18 +673,57 @@
 		}
 
 		//if !assigned(statement.endLocation) {
-			statement.endLocation = currentLocation;
+			statement.endLocation = currentLocation
 		//} // 72543: Silver: cannot check if nullable struct is assigned
 
 	}
 
 	internal func generateCommentStatement(_ commentStatement: CGCommentStatement?) {
 		if let commentStatement = commentStatement {
+			if !isNewLine {
+				AppendLine()
+			}
 			for line in commentStatement.Lines {
 				generateSingleLineCommentPrefix()
 				AppendLine(line)
 			}
 		}
+	}
+
+	internal func generateJSTagDocumentationStatement(_ jstagDocumentationStatement: CGJSTagDocumentationStatement?) {
+		if let jstagDocumentationStatement = jstagDocumentationStatement, jstagDocumentationStatement.Lines.Count > 0  {
+			if !isNewLine {
+				AppendLine()
+			}
+			AppendLine("/**")
+			for line in jstagDocumentationStatement.Lines {
+				Append("* ")
+				AppendLine(line)
+			}
+			AppendLine("*/")
+		}
+	}
+	internal func generateXmlDocumentationStatement(_ xmlDocumentationStatement: CGXmlDocumentationStatement?) {
+		if let xmlDocumentationStatement = xmlDocumentationStatement {
+			if !isNewLine {
+				AppendLine()
+			}
+			for line in xmlDocumentationStatement.Lines {
+				generateXmlDocumentationPrefix()
+				AppendLine(line)
+			}
+		}
+	}
+
+	internal func isXmlDocumentationPresent(_ xmlDocumentationStatement: CGXmlDocumentationStatement?) -> Boolean {
+		if let xmlDocumentationStatement = xmlDocumentationStatement {
+			for line in xmlDocumentationStatement.Lines {
+				if !String.IsNullOrEmpty(line) {
+					return true
+				}
+			}
+		}
+		return false
 	}
 
 	internal func generateSingleLineCommentStatement(_ commentStatement: CGSingleLineCommentStatement?) {
@@ -579,6 +757,18 @@
 		// descendant must override this
 		assert(false, "generateConditionStart not implemented")
 	}
+
+	internal func generateConditionStart<T>(_ list: List<T>,_ index: Integer) {
+		if let condition = (list[index] as! ICGHasCondition).Condition {
+			if !SameCondition(list, index - 1) {
+				if !isNewLine {
+					AppendLine()
+				}
+				generateConditionStart(condition)
+			}
+		}
+	}
+
 	internal func generateConditionElse() {
 		// descendant must override this
 		assert(false, "generateConditionElse not implemented")
@@ -586,6 +776,14 @@
 	internal func generateConditionEnd(_ condition: CGConditionalDefine) {
 		// descendant must override this
 		assert(false, "generateConditionEnd not implemented")
+	}
+
+	internal func generateConditionEnd<T>(_ list: List<T>, _ index: Integer) {
+		if let condition = (list[index] as! ICGHasCondition).Condition {
+			if !SameCondition(list, index) {
+				generateConditionEnd(condition)
+			}
+		}
 	}
 
 	internal func generateConditionalBlockStatement(_ statement: CGConditionalBlockStatement) {
@@ -603,32 +801,32 @@
 	}
 
 	internal func generateBeginEndStatement(_ statement: CGBeginEndBlockStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateBeginEndStatement not implemented")
 	}
 
 	internal func generateIfElseStatement(_ statement: CGIfThenElseStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateIfElseStatement not implemented")
 	}
 
 	internal func generateForToLoopStatement(_ statement: CGForToLoopStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateForToLoopStatement not implemented")
 	}
 
 	internal func generateForEachLoopStatement(_ statement: CGForEachLoopStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateForEachLoopStatement not implemented")
 	}
 
 	internal func generateWhileDoLoopStatement(_ statement: CGWhileDoLoopStatement) {
-		// descendant must override this or generateImports()
-		assert(false, "generagenerateWhileDoLoopStatementteImport not implemented")
+		// descendant must override this
+		assert(false, "generateWhileDoLoopStatementteImport not implemented")
 	}
 
 	internal func generateDoWhileLoopStatement(_ statement: CGDoWhileLoopStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateDoWhileLoopStatement not implemented")
 	}
 
@@ -638,82 +836,110 @@
 	}
 
 	internal func generateSwitchStatement(_ statement: CGSwitchStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateSwitchStatement not implemented")
 	}
 
 	internal func generateLockingStatement(_ statement: CGLockingStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateLockingStatement not implemented")
 	}
 
 	internal func generateUsingStatement(_ statement: CGUsingStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateUsingStatement not implemented")
 	}
 
 	internal func generateAutoReleasePoolStatement(_ statement: CGAutoReleasePoolStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateAutoReleasePoolStatement not implemented")
+		generateStatement(statement.NestedStatement) // as fallback code
+	}
+
+	internal func generateCheckedStatement(_ statement: CGCheckedStatement) {
+		// descendant must override this
+		assert(false, "generateCheckedStatement not implemented")
+		generateStatement(statement.NestedStatement) // as fallback code
+	}
+
+	internal func generateUnsafeStatement(_ statement: CGCUnsafeStatement) {
+		// descendant must override this
+		assert(false, "generateUnsafeStatement not implemented")
+		generateStatement(statement.NestedStatement) // as fallback code
 	}
 
 	internal func generateTryFinallyCatchStatement(_ statement: CGTryFinallyCatchStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateTryFinallyCatchStatement not implemented")
 	}
 
 	internal func generateReturnStatement(_ statement: CGReturnStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateReturnStatement not implemented")
 	}
 
-	internal func generateYieldStatement(_ statement: CGYieldStatement) {
-		// descendant must override this or generateImports()
-		assert(false, "generateYieldStatement not implemented")
+	internal func generateYieldExpression(_ statement: CGYieldExpression) {
+		// descendant must override this
+		assert(false, "generateYieldExpression not implemented")
 	}
 
-	internal func generateThrowStatement(_ statement: CGThrowStatement) {
-		// descendant must override this or generateImports()
-		assert(false, "generateThrowStatement not implemented")
+	internal func generateThrowExpression(_ statement: CGThrowExpression) {
+		// descendant must override this
+		assert(false, "generateThrowExpression not implemented")
 	}
 
 	internal func generateBreakStatement(_ statement: CGBreakStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateBreakStatement not implemented")
 	}
 
 	internal func generateContinueStatement(_ statement: CGContinueStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateContinueStatement not implemented")
 	}
 
+	internal func generateFallThroughStatement(_ statement: CGFallThroughStatement) {
+		// descendant must override this
+		assert(false, "fallthrough is not supported")
+	}
+
 	internal func generateVariableDeclarationStatement(_ statement: CGVariableDeclarationStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateVariableDeclarationStatement not implemented")
 	}
 
 	internal func generateAssignmentStatement(_ statement: CGAssignmentStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateAssignmentStatement not implemented")
 	}
 
+	internal func generateLocalTypeDeclarationStatement(_ statement: CGLocalTypeDeclarationStatement) {
+		// descendant must override this
+		assert(false, "generateLocalTypeDeclarationStatement not implemented")
+	}
+
 	internal func generateConstructorCallStatement(_ statement: CGConstructorCallStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateConstructorCallStatement not implemented")
 	}
 
 	internal func generateGotoStatement(_ statement: CGGotoStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateGotoStatement not implemented")
 	}
 
 	internal func generateLabelStatement(_ statement: CGLabelStatement) {
-		// descendant must override this or generateImports()
+		// descendant must override this
 		assert(false, "generateLabelStatement not implemented")
 	}
 
+	internal func generateLocalMethodStatement(_ statement: CGLocalMethodStatement) {
+		// descendant must override this
+		assert(false, "generateLocalMethodStatement not implemented")
+	}
+
 	internal func generateStatementTerminator() {
-		AppendLine(";")
+		AppendLine(StatementTerminator)
 	}
 
 	internal func generateExpressionStatement(_ expression: CGExpression) {
@@ -736,7 +962,7 @@
 	internal final func generateExpression(_ expression: CGExpression) {
 		// descendant should not override
 
-		expression.startLocation = currentLocation;
+		expression.startLocation = currentLocation
 
 		if let rawExpression = expression as? CGRawExpression {
 			helpGenerateCommaSeparatedList(rawExpression.Lines, separator: { self.AppendLine() }) { line in
@@ -758,14 +984,22 @@
 			generateTypeCastExpression(expression)
 		} else if let expression = expression as? CGInheritedExpression {
 			generateInheritedExpression(expression)
+		} else if let expression = expression as? CGMappedExpression {
+			generateMappedExpression(expression)
+		} else if let expression = expression as? CGOldExpression {
+			generateOldExpression(expression)
 		} else if let expression = expression as? CGSelfExpression {
 			generateSelfExpression(expression)
+		} else if let expression = expression as? CGResultExpression {
+			generateResultExpression(expression)
 		} else if let expression = expression as? CGNilExpression {
 			generateNilExpression(expression)
 		} else if let expression = expression as? CGPropertyValueExpression {
 			generatePropertyValueExpression(expression)
 		} else if let expression = expression as? CGAwaitExpression {
 			generateAwaitExpression(expression)
+		} else if let expression = expression as? CGLocalMethodStatement {
+			generateLocalMethodStatement(expression)
 		} else if let expression = expression as? CGAnonymousMethodExpression {
 			generateAnonymousMethodExpression(expression)
 		} else if let expression = expression as? CGAnonymousTypeExpression {
@@ -822,6 +1056,10 @@
 			generateTupleExpression(expression)
 		} else if let expression = expression as? CGTypeReferenceExpression {
 			generateTypeReferenceExpression(expression)
+		} else if let expression = expression as? CGYieldExpression {
+			generateYieldExpression(expression)
+		} else if let expression = expression as? CGThrowExpression {
+			generateThrowExpression(expression)
 		}
 
 		else {
@@ -830,7 +1068,7 @@
 		}
 
 		//if !assigned(expression.endLocation) {
-			expression.endLocation = currentLocation;
+			expression.endLocation = currentLocation
 		//} // 72543: Silver: cannot check if nullable struct is assigned
 	}
 
@@ -874,9 +1112,24 @@
 		assert(false, "generateInheritedExpression not implemented")
 	}
 
+	internal func generateMappedExpression(_ expression: CGMappedExpression) {
+		// descendant must override
+		assert(false, "generateMappedExpression not implemented")
+	}
+
+	internal func generateOldExpression(_ expression: CGOldExpression) {
+		// descendant must override
+		assert(false, "generateOldExpression not implemented")
+	}
+
 	internal func generateSelfExpression(_ expression: CGSelfExpression) {
 		// descendant must override
 		assert(false, "generateSelfExpression not implemented")
+	}
+
+	internal func generateResultExpression(_ expression: CGResultExpression) {
+		// descendant must override
+		assert(false, "generateResultExpression not implemented")
 	}
 
 	internal func generateNilExpression(_ expression: CGNilExpression) {
@@ -1013,12 +1266,12 @@
 		generateIdentifier(expression.ValueName)
 	}
 
-	internal func generateStringLiteralExpression(_ expression: CGStringLiteralExpression) {
+	public func generateStringLiteralExpression(_ expression: CGStringLiteralExpression) {
 		// descendant must override
 		assert(false, "generateStringLiteralExpression not implemented")
 	}
 
-	internal func generateCharacterLiteralExpression(_ expression: CGCharacterLiteralExpression) {
+	public func generateCharacterLiteralExpression(_ expression: CGCharacterLiteralExpression) {
 		// descendant must override
 		assert(false, "generateCharacterLiteralExpression not implemented")
 	}
@@ -1071,6 +1324,20 @@
 		Append(")")
 	}
 
+	internal func generateSingleNameOrTupleWithNames(_ names: ImmutableList<String>) {
+		// descendant may override, but this will work for most languages.
+		if names.Count == 1 {
+			generateIdentifier(names[0])
+		} else {
+			Append("(")
+			helpGenerateCommaSeparatedList(names) { name in
+				self.generateIdentifier(name)
+			}
+			Append(")")
+		}
+	}
+
+
 	internal func generateTypeReferenceExpression(_ expression: CGTypeReferenceExpression, ignoreNullability: Boolean) {
 		// descendant may override, but this will work for most languages.
 		generateTypeReference(expression.`Type`, ignoreNullability: ignoreNullability)
@@ -1089,20 +1356,43 @@
 	//
 	// Globals
 	//
+	internal func generateGlobal(_ list: List<CGGlobalDefinition>,_ index: Integer) {
+		var global = list[index]
+		var member: CGMemberDefinition? = nil
 
-	internal func generateGlobal(_ global: CGGlobalDefinition) {
 		if let global = global as? CGGlobalFunctionDefinition {
-			generateTypeMember(global.Function, type: CGGlobalTypeDefinition.GlobalType)
+			member = global.Function
 		} else if let global = global as? CGGlobalVariableDefinition {
-			generateTypeMember(global.Variable, type: CGGlobalTypeDefinition.GlobalType)
+			member = global.Variable
 		} else if let global = global as? CGGlobalPropertyDefinition {
-			generateTypeMember(global.Property, type: CGGlobalTypeDefinition.GlobalType)
-		}
-
-		else {
+			member = global.Property
+		} else {
 			assert(false, "unsupported global found: \(typeOf(global).ToString())")
 		}
+
+		generateConditionStart(list, index)
+
+		if let rawHeader = global.RawHeader, rawHeader.Count > 0 {
+			AppendLine()
+			for s in rawHeader {
+				AppendLine(s)
+			}
+			AppendLine()
+		}
+
+		generateTypeMember_skip_condition(member?, type: CGGlobalTypeDefinition.GlobalType)
+
+		if let rawFooter = global.RawFooter, rawFooter.Count > 0 {
+			AppendLine()
+			for s in rawFooter {
+				AppendLine(s)
+			}
+			AppendLine()
+		}
+
+		generateConditionEnd(list, index)
 	}
+
 
 	//
 	// Type Definitions
@@ -1114,40 +1404,65 @@
 
 	func generateAttributes(_ attributes: List<CGAttribute>?, inline: Boolean) {
 		if let attributes = attributes, attributes.Count > 0 {
-			for a in attributes {
+			for index in (0 ..< attributes.Count) {
+				var a = attributes[index]
 				if let condition = a.Condition {
-					generateConditionStart(condition)
-					generateAttribute(a, inline: false)
-					generateConditionEnd(condition)
+					generateAttribute(attributes, index, inline: false)
 				} else {
-					generateAttribute(a, inline: inline)
+					generateAttribute(attributes, index, inline: inline)
 				}
 			}
 		}
 	}
 
 	final func generateAttribute(_ attribute: CGAttribute) {
-		// descendant must override
-		generateAttribute(attribute, inline: false);
+		generateAttribute(attribute, inline: false)
 	}
 
+	final func generateAttribute(_ list: List<CGAttribute>,_ index: Integer) {
+		generateAttribute(list, index, inline: false)
+	}
+
+	func generateAttributeScope(_ attribute: CGAttribute) {
+		if let scope = attribute.Scope {
+			switch scope {
+				case .Assembly: Append("assembly:")
+				case .Module: Append("module:")
+				case .Global: Append("global:")
+				case .Result: Append("result:")
+				case .Parameter: Append("param:")
+				case .Field: Append("field:")
+				case .Getter: Append("get:")
+				case .Setter: Append("set:")
+				case .Type: Append("type:")
+				case .Method: Append("method:")
+				case .Event: Append("event:")
+				case .Property: Append("property:")
+			}
+		}
+	}
+
+	internal func generateAttribute(_ list: List<CGAttribute>,_ index: Integer, inline: Boolean) {
+		var attribute = list[index]
+		generateConditionStart(list, index)
+		generateAttribute(attribute, inline: inline)
+		generateConditionEnd(list, index)
+	}
 	internal func generateAttribute(_ attribute: CGAttribute, inline: Boolean) {
 		// descendant must override
 		assert(false, "generateAttribute not implemented")
 	}
 
-	internal final func generateTypeDefinition(_ type: CGTypeDefinition) {
-
-		if let condition = type.Condition {
-			generateConditionStart(condition)
-		}
-
-		type.startLocation = currentLocation;
+	internal final func generateTypeDefinition_skip_condition(_ type: CGTypeDefinition) {
+		type.startLocation = currentLocation
 		generateCommentStatement(type.Comment)
+		generateXmlDocumentationStatement(type.XmlDocumentation)
 		generateAttributes(type.Attributes)
 
 		if let type = type as? CGTypeAliasDefinition {
 			generateAliasType(type)
+		} else if let type = type as? CGCombinedInterfaceDefinition {
+			generateCombinedInterfaceType(type)
 		} else if let type = type as? CGBlockTypeDefinition {
 			generateBlockType(type)
 		} else if let type = type as? CGEnumTypeDefinition {
@@ -1160,6 +1475,8 @@
 			generateInterfaceType(type)
 		} else if let type = type as? CGExtensionTypeDefinition {
 			generateExtensionType(type)
+		} else if let type = type as? CGMappedTypeDefinition {
+			generateMappedType(type)
 		}
 
 		else {
@@ -1167,13 +1484,29 @@
 		}
 
 		if !assigned(type.endLocation) {
-			type.endLocation = currentLocation;
+			type.endLocation = currentLocation
 		} // 72543: Silver: cannot check if nullable struct is assigned
+	}
+
+
+	internal final func generateTypeDefinition(_ type: CGTypeDefinition) {
+
+		if let condition = type.Condition {
+			generateConditionStart(condition)
+		}
+
+		generateTypeDefinition_skip_condition(type)
 
 		if let condition = type.Condition {
 			generateConditionEnd(condition)
 		}
 
+	}
+
+	internal final func generateTypeDefinition(_ list: List<CGTypeDefinition>,_ index: Integer) {
+		generateConditionStart(list, index)
+		generateTypeDefinition_skip_condition(list[index])
+		generateConditionEnd(list, index)
 	}
 
 	internal func generateInlineComment(_ comment: String) {
@@ -1184,6 +1517,11 @@
 	internal func generateAliasType(_ type: CGTypeAliasDefinition) {
 		// descendant must override
 		assert(false, "generateAliasType not implemented")
+	}
+
+	internal func generateCombinedInterfaceType(_ type: CGCombinedInterfaceDefinition) {
+		// descendant must override
+		assert(false, "generateCombinedInterfaceType not implemented")
 	}
 
 	internal func generateBlockType(_ type: CGBlockTypeDefinition) {
@@ -1224,15 +1562,23 @@
 		generateExtensionTypeEnd(type)
 	}
 
+	internal func generateMappedType(_ type: CGMappedTypeDefinition) {
+		// descendant should not usually override
+		generateMappedTypeStart(type)
+		generateTypeMembers(type)
+		generateMappedTypeEnd(type)
+	}
+
 	internal func generateTypeMembers(_ type: CGTypeDefinition) {
 
 		var lastMember: CGMemberDefinition? = nil
-		for m in type.Members {
+		for index in (0 ..< type.Members.Count) {
+			var m = type.Members[index]
 			if let lastMember = lastMember, memberNeedsSpace(m, afterMember: lastMember) && !definitionOnly {
 				AppendLine()
 			}
-			generateTypeMember(m, type: type)
-			lastMember = m;
+			generateTypeMember(type.Members, index, type: type)
+			lastMember = m
 		}
 	}
 
@@ -1276,20 +1622,23 @@
 		assert(false, "generateExtensionTypeEnd not implemented")
 	}
 
+	internal func generateMappedTypeStart(_ type: CGMappedTypeDefinition) {
+		// descendant must override
+		assert(false, "generateMappedTypeStart not implemented")
+	}
+
+	internal func generateMappedTypeEnd(_ type: CGMappedTypeDefinition) {
+		// descendant must override
+		assert(false, "generateMappedTypeEnd not implemented")
+	}
+
 	//
 	// Type members
 	//
-
-	internal final func generateTypeMember(_ member: CGMemberDefinition, type: CGTypeDefinition) {
-
-		if let condition = type.Condition {
-			generateConditionStart(condition)
-		}
-		if let condition = member.Condition {
-			generateConditionStart(condition)
-		}
-		member.startLocation = currentLocation;
+	private final func generateTypeMember_skip_condition(_ member: CGMemberDefinition, type: CGTypeDefinition) {
+		member.startLocation = currentLocation
 		generateCommentStatement(member.Comment)
+		generateXmlDocumentationStatement(member.XmlDocumentation)
 		generateAttributes(member.Attributes)
 
 		if let member = member as? CGConstructorDefinition {
@@ -1310,6 +1659,8 @@
 			generateCustomOperatorDefinition(member, type:type)
 		} else if let member = member as? CGNestedTypeDefinition {
 			generateNestedTypeDefinition(member, type:type)
+		} else if let member = member as? CGRawMemberDefinition {
+			generateRawMemberDefinition(member, type:type)
 		} //...
 
 		else {
@@ -1318,20 +1669,31 @@
 
 		//72543: Silver: cannot check if nullable struct is assigned
 		/*if member.endLocation != nil {
-			member.endLocation = currentLocation;
+			member.endLocation = currentLocation
 		}
 		if !assigned(member.endLocation) {
-			member.endLocation = currentLocation;
+			member.endLocation = currentLocation
 		}*/
-		member.endLocation = currentLocation;
+		member.endLocation = currentLocation
+	}
+
+
+	internal final func generateTypeMember(_ member: CGMemberDefinition, type: CGTypeDefinition) {
+
+		if let condition = member.Condition {
+			generateConditionStart(condition)
+		}
+		generateTypeMember_skip_condition(member, type: type)
 
 		if let condition = member.Condition {
 			generateConditionEnd(condition)
 		}
+	}
 
-		if let condition = type.Condition {
-			generateConditionEnd(condition)
-		}
+	internal final func generateTypeMember(_ list: List<CGMemberDefinition>, _ index: Integer, type: CGTypeDefinition) {
+		generateConditionStart(list, index)
+		generateTypeMember_skip_condition(list[index], type: type)
+		generateConditionEnd(list, index)
 	}
 
 	internal func generateConstructorDefinition(_ member: CGConstructorDefinition, type: CGTypeDefinition) {
@@ -1379,6 +1741,13 @@
 		assert(false, "generateNestedTypeDefinition not implemented")
 	}
 
+	internal func generateRawMemberDefinition(_ member: CGRawMemberDefinition, type: CGTypeDefinition) {
+		for line in member.Lines {
+			AppendLine(line)
+		}
+		AppendLine()
+	}
+
 	internal func generateParameterDefinition(_ parameter: CGParameterDefinition) {
 		// descendant must override omnly if they use this, or to support GenerateParameterDefinition()
 		assert(false, "generateParameterDefinition not implemented")
@@ -1394,12 +1763,14 @@
 
 	internal final func generateTypeReference(_ type: CGTypeReference, ignoreNullability: Boolean) {
 
-		type.startLocation = currentLocation;
+		type.startLocation = currentLocation
 		//Append("["+type+"|"+Int32(type.ActualNullability).description+"]")
 
 		// descendant should not override
 		if let type = type as? CGNamedTypeReference {
 			generateNamedTypeReference(type, ignoreNullability: ignoreNullability)
+		} else if let type = type as? CGUnknownTypeReference {
+			generateUnknownTypeReference(type, ignoreNullability: ignoreNullability)
 		} else if let type = type as? CGPredefinedTypeReference {
 			generatePredefinedTypeReference(type, ignoreNullability: ignoreNullability)
 		} else if let type = type as? CGIntegerRangeTypeReference {
@@ -1414,8 +1785,18 @@
 			generateKindOfTypeReference(type, ignoreNullability: ignoreNullability)
 		} else if let type = type as? CGTupleTypeReference {
 			generateTupleTypeReference(type, ignoreNullability: ignoreNullability)
+		} else if let type = type as? CGOpaqueTypeReference {
+			generateOpaqueTypeReference(type, ignoreNullability: ignoreNullability)
+		} else if let type = type as? CGExistentialTypeReference {
+			generateExistentialTypeReference(type, ignoreNullability: ignoreNullability)
+		} else if let type = type as? CGMetaTypeReference {
+			generateMetaTypeReference(type, ignoreNullability: ignoreNullability)
 		} else if let type = type as? CGSetTypeReference {
 			generateSetTypeReference(type, ignoreNullability: ignoreNullability)
+		} else if let type = type as? CGUnionTypeReference {
+			generateUnionTypeReference(type, ignoreNullability: ignoreNullability)
+		} else if let type = type as? CGIntersectionTypeReference {
+			generateIntersectionTypeReference(type, ignoreNullability: ignoreNullability)
 		} else if let type = type as? CGSequenceTypeReference {
 			generateSequenceTypeReference(type, ignoreNullability: ignoreNullability)
 		} else if let type = type as? CGArrayTypeReference {
@@ -1429,7 +1810,7 @@
 		}
 
 		//if !assigned(type.endLocation) {
-			type.endLocation = currentLocation;
+			type.endLocation = currentLocation
 		//} // 72543: Silver: cannot check if nullable struct is assigned
 	}
 
@@ -1446,11 +1827,13 @@
 				if p > 0 {
 					Append(",")
 				}
-				generateTypeReference(param, ignoreNullability: false)
+				generateTypeReference(param, ignoreNullability: !supportNullabilityInGenerics)
 			}
 			Append(">")
 		}
 	}
+
+	internal var supportNullabilityInGenerics: Boolean  { true }
 
 	internal func generateNamedTypeReference(_ type: CGNamedTypeReference, ignoreNullability: Boolean) {
 		generateNamedTypeReference(type, ignoreNamespace: false, ignoreNullability: ignoreNullability)
@@ -1464,6 +1847,10 @@
 			generateIdentifier(type.FullName)
 		}
 		generateGenericArguments(type.GenericArguments)
+	}
+
+	internal func generateUnknownTypeReference(_ type: CGUnknownTypeReference, ignoreNullability: Boolean = false) {
+		generateInlineComment("Unknown Type")
 	}
 
 	internal func generatePredefinedTypeReference(_ type: CGPredefinedTypeReference, ignoreNullability: Boolean = false) {
@@ -1510,7 +1897,7 @@
 
 	internal func generateConstantTypeReference(_ type: CGConstantTypeReference, ignoreNullability: Boolean = false) {
 		// override if the language supports const types
-		generateTypeReference(type.`Type`)
+		generateTypeReference(type.Type)
 	}
 
 	internal func generateKindOfTypeReference(_ type: CGKindOfTypeReference, ignoreNullability: Boolean = false) {
@@ -1521,8 +1908,28 @@
 		assert(false, "generateTupleTypeReference not implemented")
 	}
 
+	internal func generateOpaqueTypeReference(_ type: CGOpaqueTypeReference, ignoreNullability: Boolean = false) {
+		assert(false, "generateOpaqueTypeReference not implemented")
+	}
+
+	internal func generateExistentialTypeReference(_ type: CGExistentialTypeReference, ignoreNullability: Boolean = false) {
+		assert(false, "generateExistentialTypeReference not implemented")
+	}
+
+	internal func generateMetaTypeReference(_ type: CGMetaTypeReference, ignoreNullability: Boolean = false) {
+		assert(false, "generateMetaTypeReference not implemented")
+	}
+
 	internal func generateSetTypeReference(_ type: CGSetTypeReference, ignoreNullability: Boolean = false) {
 		assert(false, "generateSetTypeReference not implemented")
+	}
+
+	internal func generateUnionTypeReference(_ type: CGUnionTypeReference, ignoreNullability: Boolean = false) {
+		assert(false, "generateUnionTypeReference not implemented")
+	}
+
+	internal func generateIntersectionTypeReference(_ type: CGIntersectionTypeReference, ignoreNullability: Boolean = false) {
+		assert(false, "generateIntersectionTypeReference not implemented")
 	}
 
 	internal func generateSequenceTypeReference(_ type: CGSequenceTypeReference, ignoreNullability: Boolean = false) {
@@ -1542,28 +1949,46 @@
 	//
 
 	@inline(__always) func helpGenerateCommaSeparatedList<T>(_ list: ISequence<T>, callback: (T) -> ()) {
-		helpGenerateCommaSeparatedList(list, separator: { self.Append(", ") }, wrapWhenItExceedsLineLength: true, callback: callback)
+		helpGenerateCommaSeparatedList(list, separator: { self.Append(", ") }, wrapMode: WrapMode.IfExceedsLength, callback: callback)
+	}
+
+	@inline(__always) func helpGenerateCommaSeparatedList<T>(_ list: ISequence<T>, wrapMode: WrapMode, callback: (T) -> ()) {
+		helpGenerateCommaSeparatedList(list, separator: { self.Append(", ") }, wrapMode: WrapMode.IfExceedsLength, callback: callback)
+	}
+
+	@inline(__always) func helpGenerateCommaSeparatedList<T>(_ list: ISequence<T>, wrapAlways: Boolean, callback: (T) -> ()) {
+		helpGenerateCommaSeparatedList(list, separator: { self.Append(", ") }, wrapMode: wrapAlways ? WrapMode.Always : WrapMode.IfExceedsLength, callback: callback)
 	}
 
 	@inline(__always) func helpGenerateCommaSeparatedList<T>(_ list: ISequence<T>, separator: () -> (), callback: (T) -> ()) {
-		helpGenerateCommaSeparatedList(list, separator: separator, wrapWhenItExceedsLineLength: true, callback: callback)
+		helpGenerateCommaSeparatedList(list, separator: separator, wrapMode: WrapMode.IfExceedsLength, callback: callback)
+	}
+
+	@inline(__always) func helpGenerateCommaSeparatedList<T>(_ list: ISequence<T>, separator: String!, callback: (T) -> ()) {
+		helpGenerateCommaSeparatedList(list, separator: { self.Append(separator) }, wrapMode: WrapMode.IfExceedsLength, callback: callback)
 	}
 
 	var lastStartLocation: Integer?
-	func helpGenerateCommaSeparatedList<T>(_ list: ISequence<T>, separator: () -> (), wrapWhenItExceedsLineLength: Boolean, callback: (T) -> ()) {
+	func helpGenerateCommaSeparatedList<T>(_ list: ISequence<T>, separator: () -> (), wrapMode: WrapMode, callback: (T) -> ()) {
 		let startLocation = lastStartLocation ?? currentLocation.virtualColumn
 		lastStartLocation = nil
+		var newLocation = currentLocation
 		var first = true
 		for i in list {
 			if !first {
-				separator()
-				if wrapWhenItExceedsLineLength && currentLocation.virtualColumn > splitLinesLongerThan {
-					AppendLine()
-					AppendIndentToVirtualColumn(startLocation)
+				if (currentLocation.line != newLocation.line) || (currentLocation.column != newLocation.column){
+					separator()
+					if (wrapMode == .IfExceedsLength && currentLocation.virtualColumn > splitLinesLongerThan) || wrapMode == .Always {
+						AppendLine()
+						if (startLocation != 0){
+							AppendIndentToVirtualColumn(startLocation)
+						}
+					}
 				}
 			} else {
 				first = false
 			}
+			newLocation = currentLocation
 			callback(i)
 		}
 		lastStartLocation = startLocation // keep this as possible indent for the next round
@@ -1594,9 +2019,10 @@
 	//
 
 	private var currentCode: StringBuilder!
-	private var indent: Int32 = 0
+	internal private(set) var indent: Int32 = 0
 	private var atStart = true
 	internal var inConditionExpression = false
+	internal private(set) var isNewLine = true
 
 	internal var positionedAfterPeriod: Boolean {
 		let length = currentCode.Length
@@ -1607,6 +2033,7 @@
 
 	@discardableResult internal final func Append(_ line: String) -> StringBuilder {
 		if length(line) > 0 {
+			isNewLine = false
 			if atStart {
 				AppendIndent()
 				atStart = false
@@ -1636,6 +2063,7 @@
 		currentLocation.virtualColumn = 0
 		currentLocation.offset = currentCode.Length
 		atStart = true
+		isNewLine = true
 		return currentCode
 	}
 
@@ -1695,14 +2123,87 @@
 	public final func ExpressionToString(_ expression: CGExpression) -> String {
 		currentCode = StringBuilder()
 
-		generateExpression(expression);
+		generateExpression(expression)
 		return currentCode.ToString()
+	}
+
+	public final func ExpressionToString_safe(_ expression: CGExpression) -> String {
+		let old_state = SaveState()
+		__try
+		{
+			return ExpressionToString(expression)
+		}
+		__finally
+		{
+			RestoreState(old_state)
+		}
 	}
 
 	public final func StatementToString(_ statement: CGStatement) -> String {
 		currentCode = StringBuilder()
 
-		generateStatement(statement);
+		generateStatement(statement)
 		return currentCode.ToString()
 	}
+
+	public final func StatementToString_safe(_ statement: CGStatement) -> String {
+		let old_state = SaveState()
+		__try
+		{
+			return StatementToString(statement)
+		}
+		__finally
+		{
+			RestoreState(old_state)
+		}
+	}
+
+	private struct SavedState
+	{
+		var currentCode: StringBuilder!
+		var indent: Int32
+		var atStart: Boolean
+		var inConditionExpression: Boolean
+		var isNewLine: Boolean
+		var currentLocation: CGLocation
+		var lastStartLocation: Integer?
+	}
+
+	private final func SaveState() -> SavedState
+	{
+		var l_saved = SavedState()
+		l_saved.currentCode = currentCode
+		l_saved.indent = indent
+		l_saved.atStart = atStart
+		l_saved.inConditionExpression = inConditionExpression
+		l_saved.isNewLine = isNewLine
+		l_saved.currentLocation = currentLocation
+		l_saved.lastStartLocation = lastStartLocation
+
+		currentCode = StringBuilder()
+		indent = 0
+		atStart = true
+		inConditionExpression = false
+		isNewLine = true
+		currentLocation = CGLocation()
+		lastStartLocation = nil
+		return l_saved
+	}
+
+	private final func RestoreState(_ state: SavedState)
+	{
+		currentCode = state.currentCode
+		indent = state.indent
+		atStart = state.atStart
+		inConditionExpression = state.inConditionExpression
+		isNewLine = state.isNewLine
+		currentLocation = state.currentLocation
+		lastStartLocation = state.lastStartLocation
+	}
+}
+
+public enum WrapMode {
+	case Never
+	case IfExceedsLength
+	case Always
 }

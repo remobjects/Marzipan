@@ -87,8 +87,16 @@ public __abstract class CGCStyleCodeGenerator : CGCodeGenerator {
 		AppendLine(")")
 		generateStatementIndentedUnlessItsABeginEndBlock(statement.IfStatement)
 		if let elseStatement = statement.ElseStatement {
-			AppendLine("else")
-			generateStatementIndentedUnlessItsABeginEndBlock(elseStatement)
+			Append("else")
+			if let elseStatement = elseStatement as? CGIfThenElseStatement {
+				Append(" ")
+				generateIfElseStatement(elseStatement)
+			}
+			else
+			{
+				AppendLine()
+				generateStatementIndentedUnlessItsABeginEndBlock(elseStatement)
+			}
 		}
 	}
 
@@ -113,11 +121,21 @@ public __abstract class CGCStyleCodeGenerator : CGCodeGenerator {
 		Append("; ")
 
 		generateIdentifier(statement.LoopVariableName)
-		if statement.Direction == CGLoopDirectionKind.Forward {
-			Append("++ ")
-		} else {
-			Append("-- ")
+		if let step = statement.Step {
+			if statement.Direction == CGLoopDirectionKind.Forward {
+				Append(" += ")
+			} else {
+				Append(" -= ")
+			}
+			generateExpression(step)
+		} else  {
+			if statement.Direction == CGLoopDirectionKind.Forward {
+				Append("++ ")
+			} else {
+				Append("-- ")
+			}
 		}
+
 		AppendLine(")")
 
 		generateStatementIndentedUnlessItsABeginEndBlock(statement.NestedStatement)
@@ -168,11 +186,10 @@ public __abstract class CGCStyleCodeGenerator : CGCodeGenerator {
 		if let value = statement.Value {
 			Append("return ")
 			generateExpression(value)
-			generateStatementTerminator()
 		} else {
 			Append("return")
-			generateStatementTerminator()
 		}
+		generateStatementTerminator()
 	}
 
 	override func generateBreakStatement(_ statement: CGBreakStatement) {
@@ -227,7 +244,8 @@ public __abstract class CGCStyleCodeGenerator : CGCodeGenerator {
 			case .Not: Append("!")
 			case .BitwiseNot: Append("~")
 			case .AddressOf: Append("&")
-			case .ForceUnwrapNullable: // no-op
+			case .AddressOfBlock: break // no-op
+			case .ForceUnwrapNullable: break // no-op
 		}
 	}
 
@@ -299,8 +317,14 @@ public __abstract class CGCStyleCodeGenerator : CGCodeGenerator {
 				case "\u{0080}".."\u{ffffffff}": result.Append("\\u{"+Sugar.Cryptography.Utils.ToHexString(Integer(ch), 4)) // Cannot use the binary operator ".."
 				*/
 				default:
-					if ch < 32 || ch > 0x7f {
+					if ch < 32 {
 						result.Append(cStyleEscapeSequenceForCharacter(ch))
+					} else if ch > 0x7f {
+						if preserveUnicodeCharactersInStringLiterals {
+							result.Append(ch)
+						} else {
+							result.Append(cStyleEscapeSequenceForCharacter(ch))
+						}
 					} else {
 						result.Append(ch)
 					}

@@ -127,10 +127,24 @@ public extension CGExpression {
 		}
 	}
 
+	public func AsCallParameter(_ Modifier: CGParameterModifierKind) -> CGCallParameter {
+		let result = CGCallParameter(self)
+		result.Modifier = Modifier
+		return result
+	}
+
 	public func AsEllipsisCallParameter() -> CGCallParameter {
 		let result = CGCallParameter(self)
 		result.EllipsisParameter = true
 		return result
+	}
+
+	public func AsInvariant() -> CGInvariant {
+		return CGInvariant(self)
+	}
+
+	public func AsInvariant(_ message: String) -> CGInvariant {
+		return CGInvariant(self, message)
 	}
 }
 
@@ -149,6 +163,53 @@ public extension CGFieldDefinition {
 public extension CGMethodDefinition {
 	public func AsGlobal() -> CGGlobalFunctionDefinition {
 		return CGGlobalFunctionDefinition(self)
+	}
+}
+
+public extension CGParameterDefinition {
+	public func AsExpression() -> CGParameterAccessExpression {
+		return CGParameterAccessExpression(self.Name)
+	}
+	public func AsCallParameter() -> CGCallParameter {
+		return self.AsExpression().AsCallParameter()
+	}
+	public func AsCallParameter(_ name: String?) -> CGCallParameter {
+		return self.AsExpression().AsCallParameter(name)
+	}
+}
+
+public extension CGVariableDeclarationStatement {
+	public func AsExpression() -> CGLocalVariableAccessExpression {
+		return CGLocalVariableAccessExpression(self.Name)
+	}
+	public func AsCallParameter() -> CGCallParameter {
+		return self.AsExpression().AsCallParameter()
+	}
+	public func AsCallParameter(_ name: String?) -> CGCallParameter {
+		return self.AsExpression().AsCallParameter(name)
+	}
+}
+
+public extension CGFieldDefinition {
+	public func AsExpression() -> CGFieldAccessExpression {
+		return AsExpression(nil)
+	}
+
+	public func AsExpression(_ callSite: CGExpression?) -> CGFieldAccessExpression {
+		return CGFieldAccessExpression(callSite, self.Name)
+	}
+
+	public func AsCallParameter() -> CGCallParameter {
+		return self.AsExpression().AsCallParameter()
+	}
+	public func AsCallParameter(_ name: String?) -> CGCallParameter {
+		return self.AsExpression().AsCallParameter(name)
+	}
+}
+
+public extension CGTypeDefinition {
+	public func AsTypeReference() -> CGTypeReference {
+		return CGNamedTypeReference(Name)
 	}
 }
 

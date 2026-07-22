@@ -23,6 +23,12 @@ public class CGRawStatement : CGBaseMultilineStatement { // not language-agnosti
 public class CGCommentStatement : CGBaseMultilineStatement {
 }
 
+public class CGXmlDocumentationStatement : CGBaseMultilineStatement {
+}
+
+public class CGJSTagDocumentationStatement : CGCommentStatement {
+}
+
 public class CGSingleLineCommentStatement : CGStatement {
 	public let Comment: String
 
@@ -120,6 +126,7 @@ public class CGForToLoopStatement: CGNestingStatement {
 	public var LoopVariableType: CGTypeReference? // nil means it won't be declared, just used
 	public var StartValue: CGExpression
 	public var EndValue: CGExpression
+	public var Step: CGExpression?
 	public var Direction: CGLoopDirectionKind = .Forward
 
 	public init(_ loopVariableName: String, _ loopVariableType: CGTypeReference, _ startValue: CGExpression, _ endValue: CGExpression, _ statement: CGStatement) {
@@ -132,14 +139,20 @@ public class CGForToLoopStatement: CGNestingStatement {
 }
 
 public class CGForEachLoopStatement: CGNestingStatement {
-	public var LoopVariableName: String
-	public var LoopVariableType: CGTypeReference //not all languages require this but some do, so we'll require it
+	public var LoopVariableNames: List<String>
+	public var LoopVariableType: CGTypeReference? //not all languages require this but some do, so we'll require it
 	public var Collection: CGExpression
 
-	public init(_ loopVariableName: String, _ loopVariableType: CGTypeReference, _ collection: CGExpression, _ statement: CGStatement) {
+	public init(_ loopVariableName: String, _ loopVariableType: CGTypeReference? = nil, _ collection: CGExpression, _ statement: CGStatement) {
 		super.init(statement)
-		LoopVariableName = loopVariableName
+		LoopVariableNames = List<String>(loopVariableName)
 		LoopVariableType = loopVariableType
+		Collection = collection
+	}
+
+	public init(_ loopVariableNames: List<String>, _ collection: CGExpression, _ statement: CGStatement) {
+		super.init(statement)
+		LoopVariableNames = loopVariableNames
 		Collection = collection
 	}
 }
@@ -217,7 +230,7 @@ public class CGLockingStatement: CGNestingStatement {
 }
 
 public class CGUsingStatement: CGNestingStatement {
-	public var Name: String
+	public var Name: String?
 	public var `Type`: CGTypeReference?
 	public var Value: CGExpression
 
@@ -226,9 +239,20 @@ public class CGUsingStatement: CGNestingStatement {
 		Name = name
 		Value = value
 	}
+	public init(_ value: CGExpression, _ nestedStatement: CGStatement) {
+		super.init(nestedStatement)
+		Value = value
+	}
 }
 
-public class CGAutoReleasePoolStatement: CGNestingStatement {}
+public class CGAutoReleasePoolStatement: CGNestingStatement {
+}
+
+public class CGCheckedStatement : CGNestingStatement {
+}
+
+public class CGCUnsafeStatement : CGNestingStatement {
+}
 
 public class CGTryFinallyCatchStatement: CGBlockStatement {
 	public var FinallyStatements = List<CGStatement>()
@@ -266,27 +290,15 @@ public class CGReturnStatement: CGStatement {
 	}
 }
 
-public class CGYieldStatement: CGStatement {
-	public var Value: CGExpression
 
-	public init(_ value: CGExpression) {
-		Value = value
-	}
-}
-
-public class CGThrowStatement: CGStatement {
-	public var Exception: CGExpression?
-
-	public init() {
-	}
-	public init(_ exception: CGExpression?) {
-		Exception = exception
-	}
-}
+@Obsolete("use CGYieldExpression, instead")
+public typealias CGYieldStatement = CGYieldExpression
+@Obsolete("use CGThrowExpression, instead")
+public typealias CGThrowStatement = CGThrowExpression
 
 public class CGBreakStatement: CGStatement {}
-
 public class CGContinueStatement: CGStatement {}
+public class CGFallThroughStatement: CGStatement {}
 
 public class CGEmptyStatement: CGStatement {}
 
@@ -309,14 +321,41 @@ public class CGConstructorCallStatement : CGStatement {
 	}
 }
 
+public class CGLocalMethodStatement : CGAnonymousMethodExpression {
+	public var Name: String
+	public var Throws = false /* Swift and Java only */
+
+	public init(_ name: String) {
+		super.init()
+		Name = name
+	}
+	public init(_ name: String, _ statements: List<CGStatement>) {
+		super.init(statements)
+		Name = name
+	}
+	public init(_ name: String, _ statements: CGStatement...) {
+		super.init(statements)
+		Name = name
+	}
+	public init(_ name: String, _ parameters: List<CGParameterDefinition>, _ statements: List<CGStatement>) {
+		super.init(parameters, statements)
+		Name = name
+	}
+	public init(_ name: String, _ parameters: CGParameterDefinition[], _ statements: CGStatement[]) {
+		super.init(parameters, statements)
+		Name = name
+	}
+}
+
 /* Operator statements */
 
-public class CGVariableDeclarationStatement: CGStatement {
+public class CGVariableDeclarationStatement: CGStatement, ICGHasCondition {
 	public var Name: String
 	public var `Type`: CGTypeReference?
 	public var Value: CGExpression?
 	public var Constant = false
 	public var ReadOnly = false
+	public var Condition: CGConditionalDefine?
 
 	public init(_ name: String, _ type: CGTypeReference?, _ value: CGExpression? = nil) {
 		Name = name
@@ -332,6 +371,17 @@ public class CGVariableDeclarationStatement: CGStatement {
 		ReadOnly = readOnly
 	}
 }
+
+// used in JS only
+public class CGLocalTypeDeclarationStatement: CGStatement, ICGHasCondition {
+	public var `Type`: CGTypeDefinition
+	public var Condition: CGConditionalDefine?
+
+	public init(_ type: CGTypeDefinition) {
+		`Type` = type
+	}
+}
+
 
 public class CGAssignmentStatement: CGStatement {
 	public var Target: CGExpression

@@ -6,7 +6,7 @@
 		generateHeader()
 		generateDirectives()
 		if let namespace = currentUnit.Namespace {
-			AppendLine();
+			AppendLine()
 			generateImports()
 			generateForwards()
 			cppGenerateCPPGlobals()
@@ -17,22 +17,29 @@
 
 	func cppGenerateCPPGlobals(){
 		var lastGlobal: CGGlobalDefinition? = nil
+		var list = List<CGGlobalDefinition>()
 		for g in currentUnit.Globals {
-			var visibility: CGMemberVisibilityKind = .Unspecified;
+			var visibility: CGMemberVisibilityKind = .Unspecified
 			 if let method = g as? CGGlobalFunctionDefinition {
-				visibility = .Unit;
+				visibility = .Unit
 			}
 			 if let variable = g as? CGGlobalVariableDefinition {
-				visibility = variable.Variable.Visibility;
+				visibility = variable.Variable.Visibility
 			}
 			// generate only .Unit & .Private visibility
 			if ((visibility == .Unit)||(visibility == .Private)){
-				if let lastGlobal = lastGlobal, globalNeedsSpace(g, afterGlobal: lastGlobal) {
-					AppendLine()
-				}
-				generateGlobal(g)
-				lastGlobal = g;
+				list.Add(g)
 			}
+		}
+
+		for index in (0 ..< list.Count) {
+			var g = list[index]
+			if let lastGlobal = lastGlobal, globalNeedsSpace(g, afterGlobal: lastGlobal) {
+				AppendLine()
+			}
+
+			generateGlobal(list, index)
+			lastGlobal = g
 		}
 		if lastGlobal != nil {
 			AppendLine()
@@ -44,9 +51,9 @@
 		if UseHdrStop {
 			AppendLine("#pragma hdrstop")
 		}
-		var lnamespace = "";
+		var lnamespace = ""
 		if let namespace = currentUnit.Namespace {
-			lnamespace = namespace.Name;
+			lnamespace = namespace.Name
 		}
 		if let fileName = currentUnit.FileName {
 			AppendLine("#include \"\(Path.ChangeExtension(fileName, ".h"))\"")
@@ -54,11 +61,12 @@
 	}
 
 	override func generateFooter(){
-		var lnamespace = currentUnit.FileName;
+		var lnamespace = currentUnit.FileName
 		if isCBuilder() {
 			// c++Builder part
 			if let initialization = currentUnit.Initialization {
-				AppendLine("void __initialization_\(lnamespace)();")
+				Append("void __initialization_\(lnamespace)()")
+				generateStatementTerminator()
 				generatePragma("startup __initialization_\(lnamespace)")
 				AppendLine("void __initialization_\(lnamespace)()")
 				AppendLine("{")
@@ -68,7 +76,8 @@
 				AppendLine("}")
 			}
 			if let finalization = currentUnit.Finalization {
-				AppendLine("void __finalization_\(lnamespace)();")
+				Append("void __finalization_\(lnamespace)()")
+				generateStatementTerminator()
 				generatePragma("exit __finalization_\(lnamespace)")
 				AppendLine("void __finalization_\(lnamespace)()")
 				AppendLine("{")
@@ -88,8 +97,8 @@
 
 	override func generateDirectives() {
 		if currentUnit.ImplementationDirectives.Count > 0 {
-			for d in currentUnit.ImplementationDirectives {
-				generateDirective(d)
+			for index in (0 ..< currentUnit.ImplementationDirectives.Count) {
+				generateDirective(currentUnit.ImplementationDirectives, index)
 			}
 			AppendLine()
 		}
@@ -119,7 +128,7 @@
 		// process local variables
 		if let localVariables = method.LocalVariables, localVariables.Count > 0 {
 			for v in localVariables {
-				generateVariableDeclarationStatement(v);
+				generateVariableDeclarationStatement(v)
 			}
 		}
 		generateStatements(method.Statements)
@@ -158,7 +167,7 @@
 		// process local variables
 		if let localVariables = ctor.LocalVariables, localVariables.Count > 0 {
 			for v in localVariables {
-				generateVariableDeclarationStatement(v);
+				generateVariableDeclarationStatement(v)
 			}
 		}
 		generateStatements(ctor.Statements)
@@ -174,7 +183,7 @@
 		// process local variables
 		if let localVariables = dtor.LocalVariables, localVariables.Count > 0 {
 			for v in localVariables {
-				generateVariableDeclarationStatement(v);
+				generateVariableDeclarationStatement(v)
 			}
 		}
 		generateStatements(dtor.Statements)

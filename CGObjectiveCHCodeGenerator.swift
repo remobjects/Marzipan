@@ -29,7 +29,11 @@
 	//
 
 	override func generateAliasType(_ type: CGTypeAliasDefinition) {
-
+		Append("typedef ")
+		generateTypeReference(type.ActualType)
+		Append(" ")
+		generateIdentifier(type.Name)
+		AppendLine(";")
 	}
 
 	override func generateBlockType(_ type: CGBlockTypeDefinition) {
@@ -48,7 +52,7 @@
 		AppendLine(")")
 		AppendLine("{")
 		incIndent()
-		helpGenerateCommaSeparatedList(type.Members) { m in
+		helpGenerateCommaSeparatedList(type.Members, wrapAlways: wrapEnums) { m in
 			if let member = m as? CGEnumValueDefinition {
 				self.generateIdentifier(type.Name+"_"+member.Name) // Obj-C enums must be unique
 				if let value = member.Value {
@@ -88,8 +92,8 @@
 	override func generateInterfaceTypeStart(_ type: CGInterfaceTypeDefinition) {
 		Append("@protocol ")
 		generateIdentifier(type.Name)
-		objcGenerateAncestorList(type)
-		AppendLine()
+		//objcGenerateAncestorList(type)
+		//AppendLine()
 		AppendLine()
 	}
 
@@ -143,11 +147,11 @@
 			}
 			if let type = property.`Type` {
 				if type.IsClassType {
-					//switch type.StorageModifier {
-						//case .Strong: Append(", strong")
-						//case .Weak: Append(", weak")
-						//case .Unretained: Append(", unsafe_unretained")
-					//}
+					switch property.StorageModifier {
+						case .Strong: Append(", strong")
+						case .Weak: Append(", weak")
+						case .Unretained: Append(", unsafe_unretained")
+					}
 				} else {
 					//todo?
 				}

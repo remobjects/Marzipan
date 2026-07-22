@@ -9,10 +9,11 @@ public enum CGTypeNullabilityKind {
 }
 
 public __abstract class CGTypeReference : CGEntity {
-	public fileprivate(set) var Nullability: CGTypeNullabilityKind = .Default
-	public fileprivate(set) var DefaultNullability: CGTypeNullabilityKind = .NotNullable
-	public fileprivate(set) var DefaultValue: CGExpression?
-	public fileprivate(set) var IsClassType = false
+	public /*fileprivate(set)*/ var Nullability: CGTypeNullabilityKind = .Default
+	public /*fileprivate(set)*/ var DefaultNullability: CGTypeNullabilityKind = .NotNullable
+	public /*fileprivate(set)*/ var DefaultValue: CGExpression?
+	public /*fileprivate(set)*/ var IsClassType = false
+	public var Attribute: CGAttribute?  // Apple Swift only
 
 	public lazy var NullableUnwrapped: CGTypeReference    = ActualNullability == CGTypeNullabilityKind.NullableUnwrapped    ? self : self.copyWithNullability(CGTypeNullabilityKind.NullableUnwrapped)
 	public lazy var NullableNotUnwrapped: CGTypeReference = ActualNullability == CGTypeNullabilityKind.NullableNotUnwrapped ? self : self.copyWithNullability(CGTypeNullabilityKind.NullableNotUnwrapped)
@@ -36,6 +37,14 @@ public enum CGStorageModifierKind {
 	case Strong
 	case Weak
 	case Unretained
+}
+
+public class CGUnknownTypeReference : CGTypeReference {
+	public override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
+		return self
+	}
+
+	public static lazy var UnknownType = CGUnknownTypeReference()
 }
 
 public class CGNamedTypeReference : CGTypeReference {
@@ -92,6 +101,37 @@ public class CGNamedTypeReference : CGTypeReference {
 
 	@ToString public func ToString() -> String {
 		return "<\(Name)>";
+	}
+}
+
+__abstract public class CGWrapperTypeReference : CGTypeReference {
+	public var Type: CGTypeReference
+
+	public init(_ type: CGTypeReference) {
+		self.Type = type
+	}
+
+	public init(_ type: CGTypeReference, nullability: CGTypeNullabilityKind) {
+		self.Type = type
+		self.Nullability = nullability
+	}
+}
+
+public class CGOpaqueTypeReference : CGWrapperTypeReference {
+	public override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
+		return CGOpaqueTypeReference(Type, nullability: nullability);
+	}
+}
+
+public class CGExistentialTypeReference : CGWrapperTypeReference {
+	public override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
+		return CGExistentialTypeReference(Type, nullability: nullability);
+	}
+}
+
+public class CGMetaTypeReference : CGWrapperTypeReference {
+	public override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
+		return CGMetaTypeReference(Type, nullability: nullability);
 	}
 }
 
@@ -396,7 +436,7 @@ public class CGSequenceTypeReference : CGTypeReference {
 	}
 
 	@ToString public func ToString() -> String {
-		return "<sequence od \(`Type`.ToString())>";
+		return "<sequence of \(`Type`.ToString())>";
 	}
 }
 
@@ -410,6 +450,46 @@ public class CGSetTypeReference : CGTypeReference {
 
 	override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
 		let result = CGSetTypeReference(`Type`)
+
+		result.Nullability = nullability
+		result.DefaultValue = DefaultValue
+		result.IsClassType = IsClassType
+		return result
+	}
+}
+
+// used in JS as `type1 | type2`
+public class CGUnionTypeReference : CGTypeReference {
+	public var Types: List<CGTypeReference>
+
+	public init(_ types: List<CGTypeReference>) {
+		super.init()
+		Types = types
+		DefaultNullability = .NotNullable
+	}
+
+	override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
+		let result = CGUnionTypeReference(Types)
+
+		result.Nullability = nullability
+		result.DefaultValue = DefaultValue
+		result.IsClassType = IsClassType
+		return result
+	}
+}
+
+// used in JS as `type1 & type2`
+public class CGIntersectionTypeReference : CGTypeReference {
+	public var Types: List<CGTypeReference>
+
+	public init(_ types: List<CGTypeReference>) {
+		super.init()
+		Types = types
+		DefaultNullability = .NotNullable
+	}
+
+	override func copyWithNullability(_ nullability: CGTypeNullabilityKind) -> CGTypeReference {
+		let result = CGUnionTypeReference(Types)
 
 		result.Nullability = nullability
 		result.DefaultValue = DefaultValue
@@ -474,12 +554,16 @@ public class CGArrayTypeReference : CGTypeReference {
 }
 
 public class CGArrayBounds : CGEntity {
-	public var Start: Int32 = 0
-	public var End: Int32?
+	public var Start: CGExpression = 0
+	public var End: CGExpression?
 
 	public init() {
 	}
 	public init(_ start: Int32, end: Int32) {
+		Start = CGIntegerLiteralExpression(start)
+		End = CGIntegerLiteralExpression(end)
+	}
+	public init(_ start: CGExpression, end: CGExpression?) {
 		Start = start
 		End = end
 	}
@@ -508,6 +592,6 @@ public class CGDictionaryTypeReference : CGTypeReference {
 	}
 
 	@ToString public func ToString() -> String {
-		return "<dinctionary of \(`KeyType`.ToString()):\(`ValueType`.ToString())>";
+		return "<dictionary of \(`KeyType`.ToString()):\(`ValueType`.ToString())>";
 	}
 }
