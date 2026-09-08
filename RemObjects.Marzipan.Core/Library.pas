@@ -173,16 +173,13 @@ begin
     exit;
   end;
 
-  var lPtr := CFStringGetCharactersPtr(s);
-  if lPtr <> nil then begin
-    result := lFunc(lPtr, lLen);
-    exit;
+    // The CoreCLR unmanaged entry point must not retain or observe a borrowed
+    // CFString buffer while Cocoa can re-enter this thread. Copy the UTF-16
+    // code units into native-owned storage for the duration of the call.
+    var lBuffer := new rtl.UniChar[lLen];
+    CFStringGetCharacters(s, CFRangeMake(0, lLen), @lBuffer[0]);
+    result := lFunc(@lBuffer[0], lLen);
   end;
-
-  var lBuffer := new rtl.UniChar[lLen];
-  CFStringGetCharacters(s, CFRangeMake(0, lLen), @lBuffer[0]);
-  result := lFunc(@lBuffer[0], lLen);
-end;
 
 class method MZString.NSStringWithNetString(s: ^Void): NSString;
 begin

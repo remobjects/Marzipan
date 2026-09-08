@@ -192,7 +192,7 @@ type
   protected
     fInstance: ^Void;
     class var fFreeHandleDelegate, fIsExceptionDelegate: ^Void;
-    class var fEqualsDelegate, fDescriptionDelegate, fExceptionStringDelegate, fExceptionTypeDelegate, fExceptionMessageDelegate, fExceptionStackTraceDelegate: ^Void;
+    class var fEqualsDelegate, fDescriptionDelegate, fExceptionTypeDelegate, fExceptionMessageDelegate: ^Void;
     method setInstance(aInstance: ^Void);
   public
     class method isExceptionHandle(aHandle: ^Void): Boolean;
@@ -1111,37 +1111,19 @@ begin
   if aEx = nil then
     raise new MZException withName("Exception") reason("Exception") userInfo(nil);
 
-  if fExceptionStringDelegate = nil then
-    fExceptionStringDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionToString");
   if fExceptionTypeDelegate = nil then
     fExceptionTypeDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionType");
   if fExceptionMessageDelegate = nil then
     fExceptionMessageDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionMessage");
-  if fExceptionStackTraceDelegate = nil then
-    fExceptionStackTraceDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.ObjectHelpers", "ExceptionStackTrace");
 
-  var lToString: function(aException: ^Void): ^Void;
   var lGetType: function(aException: ^Void): ^Void;
   var lGetMessage: function(aException: ^Void): ^Void;
-  var lGetStackTrace: function(aException: ^Void): ^Void;
-  ^^Void(@lToString)^ := fExceptionStringDelegate;
   ^^Void(@lGetType)^ := fExceptionTypeDelegate;
   ^^Void(@lGetMessage)^ := fExceptionMessageDelegate;
-  ^^Void(@lGetStackTrace)^ := fExceptionStackTraceDelegate;
 
   var lMessage: NSString := "Exception";
   var lManagedType: NSString := nil;
   var lManagedMessage: NSString := nil;
-  var lManagedStackTrace: NSString := nil;
-
-  var lStringHandle := lToString(aEx);
-  if lStringHandle <> nil then begin
-    try
-      lMessage := MZString.NSStringWithNetString(lStringHandle);
-    finally
-      freeHandle(lStringHandle);
-    end;
-  end;
 
   var lTypeHandle := lGetType(aEx);
   if lTypeHandle <> nil then begin
@@ -1161,13 +1143,16 @@ begin
     end;
   end;
 
-  var lStackTraceHandle := lGetStackTrace(aEx);
-  if lStackTraceHandle <> nil then begin
-    try
-      lManagedStackTrace := MZString.NSStringWithNetString(lStackTraceHandle);
-    finally
-      freeHandle(lStackTraceHandle);
-    end;
+  // Exception.ToString and Exception.StackTrace walk managed stack frames. That
+  // is unsafe at this native boundary: a malformed frame can make CoreCLR fault
+  // while the native host is only trying to report the original exception.
+  if assigned(lManagedType) then begin
+    lMessage := lManagedType;
+    if assigned(lManagedMessage) and (lManagedMessage.length > 0) then
+      lMessage := NSString.stringWithFormat('%@: %@', lManagedType, lManagedMessage);
+  end
+  else if assigned(lManagedMessage) then begin
+    lMessage := lManagedMessage;
   end;
 
   var lUserInfo := new NSMutableDictionary;
@@ -1175,8 +1160,6 @@ begin
     lUserInfo.setObject(lManagedType) forKey('ManagedExceptionType');
   if assigned(lManagedMessage) then
     lUserInfo.setObject(lManagedMessage) forKey('ManagedExceptionMessage');
-  if assigned(lManagedStackTrace) then
-    lUserInfo.setObject(lManagedStackTrace) forKey('ManagedExceptionStackTrace');
 
   freeHandle(aEx);
   raise new MZException withName("Exception") reason(lMessage) userInfo(lUserInfo);
