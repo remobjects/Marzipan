@@ -215,41 +215,9 @@ type
     class method forceGarbageCollection: NSString;
   end;
 
-  MZDebugVoidCallback = public procedure(aUserData: ^Void);
-  MZDebugIntCallback = public procedure(aUserData: ^Void; aValue: Integer);
-  MZDebugObjectCallback = public procedure(aUserData: ^Void; aValue: ^Void);
-  MZDebugStringCallback = public procedure(aUserData: ^Void; aValue: ^Void);
-  MZDebugTwoStringCallback = public procedure(aUserData: ^Void; aFirst: ^Void; aSecond: ^Void);
-  MZDebugObjectStringCallback = public procedure(aUserData: ^Void; aFirst: ^Void; aSecond: ^Void);
-  MZDebugTwoObjectCallback = public procedure(aUserData: ^Void; aFirst: ^Void; aSecond: ^Void);
-  MZDebugRemoteFileNeededCallback = public function(aUserData: ^Void; aRemoteFileName: ^Void): ^Void;
-  MZDebugBreakExceptionCallback = public procedure(aUserData: ^Void; aThread: ^Void; aFatal: Byte; aType: ^Void; aMessage: ^Void);
-  MZDebugProgressCallback = public procedure(aUserData: ^Void; aPercentage: Integer; aMessage: ^Void);
-
-  MZCoreDebugEngineCallbacks = public class
-  private
-    class var fAttachCallbacksDelegate: ^Void;
+  MZCoreCallbackBridge = public class
   public
-    class method attach(aDebugEngine: ^Void) userData(aUserData: ^Void)
-      debugProgress(aDebugProgress: MZDebugProgressCallback)
-      threadStarted(aThreadStarted: MZDebugObjectCallback)
-      threadFinished(aThreadFinished: MZDebugObjectCallback)
-      threadRenamed(aThreadRenamed: MZDebugObjectCallback)
-      processTerminated(aProcessTerminated: MZDebugIntCallback)
-      processStarted(aProcessStarted: MZDebugVoidCallback)
-      processReady(aProcessReady: MZDebugVoidCallback)
-      processFailedToStart(aProcessFailedToStart: MZDebugStringCallback)
-      log(aLog: MZDebugTwoStringCallback)
-      stdOut(aSTDOut: MZDebugStringCallback)
-      stdErr(aSTDErr: MZDebugStringCallback)
-      breakStop(aBreakStop: MZDebugTwoObjectCallback)
-      breakpointResolved(aBreakpointResolved: MZDebugObjectCallback)
-      breakpointSignal(aBreakpointSignal: MZDebugObjectStringCallback)
-      remoteFileNeeded(aRemoteFileNeeded: MZDebugRemoteFileNeededCallback)
-      breakException(aBreakException: MZDebugBreakExceptionCallback)
-      disposed(aDisposed: MZDebugVoidCallback)
-      moduleLoad(aModuleLoad: MZDebugObjectCallback)
-      moduleUnload(aModuleUnload: MZDebugObjectCallback): ^Void;
+    class method attach(aAssemblyName, aTypeName, aMethodName: String) target(aTarget, aUserData, aCallbackTable: ^Void): ^Void;
   end;
 
   hostfxr_delegate_type = public enum
@@ -1256,98 +1224,12 @@ begin
   end;
 end;
 
-class method MZCoreDebugEngineCallbacks.attach(aDebugEngine: ^Void) userData(aUserData: ^Void)
-  debugProgress(aDebugProgress: MZDebugProgressCallback)
-  threadStarted(aThreadStarted: MZDebugObjectCallback)
-  threadFinished(aThreadFinished: MZDebugObjectCallback)
-  threadRenamed(aThreadRenamed: MZDebugObjectCallback)
-  processTerminated(aProcessTerminated: MZDebugIntCallback)
-  processStarted(aProcessStarted: MZDebugVoidCallback)
-  processReady(aProcessReady: MZDebugVoidCallback)
-  processFailedToStart(aProcessFailedToStart: MZDebugStringCallback)
-  log(aLog: MZDebugTwoStringCallback)
-  stdOut(aSTDOut: MZDebugStringCallback)
-  stdErr(aSTDErr: MZDebugStringCallback)
-  breakStop(aBreakStop: MZDebugTwoObjectCallback)
-  breakpointResolved(aBreakpointResolved: MZDebugObjectCallback)
-  breakpointSignal(aBreakpointSignal: MZDebugObjectStringCallback)
-  remoteFileNeeded(aRemoteFileNeeded: MZDebugRemoteFileNeededCallback)
-  breakException(aBreakException: MZDebugBreakExceptionCallback)
-  disposed(aDisposed: MZDebugVoidCallback)
-  moduleLoad(aModuleLoad: MZDebugObjectCallback)
-  moduleUnload(aModuleUnload: MZDebugObjectCallback): ^Void;
+class method MZCoreCallbackBridge.attach(aAssemblyName, aTypeName, aMethodName: String) target(aTarget, aUserData, aCallbackTable: ^Void): ^Void;
 begin
-  if fAttachCallbacksDelegate = nil then
-    fAttachCallbacksDelegate := MZCoreRuntime.sharedInstance.createDelegate("RemObjects.Marzipan.Bridge", "RemObjects.Marzipan.Bridge.DebugEngineCallbackHelpers", "AttachCallbacks");
-
-  var lFunc: function(aDebugEngine: ^Void; aUserData: ^Void;
-                      aDebugProgress: ^Void;
-                      aThreadStarted: ^Void;
-                      aThreadFinished: ^Void;
-                      aThreadRenamed: ^Void;
-                      aProcessTerminated: ^Void;
-                      aProcessStarted: ^Void;
-                      aProcessReady: ^Void;
-                      aProcessFailedToStart: ^Void;
-                      aLog: ^Void;
-                      aSTDOut: ^Void;
-                      aSTDErr: ^Void;
-                      aBreakStop: ^Void;
-                      aBreakpointResolved: ^Void;
-                      aBreakpointSignal: ^Void;
-                      aRemoteFileNeeded: ^Void;
-                      aBreakException: ^Void;
-                      aDisposed: ^Void;
-                      aModuleLoad: ^Void;
-                      aModuleUnload: ^Void): ^Void;
-  ^^Void(@lFunc)^ := fAttachCallbacksDelegate;
-
-  // Procedural variables are stored as native function pointers.  Do not pass
-  // @aDebugProgress (or any sibling) to managed code: that is the address of
-  // this stack slot, not the executable callback.  CoreCLR will later invoke
-  // these callbacks from thread-pool/debugger threads, so a stack-slot address
-  // turns into an EXC_BAD_ACCESS jump into another thread's stack.  Dereference
-  // the procedural variable storage once and pass the actual entry point.
-  var lDebugProgress: ^Void := ^^Void(@aDebugProgress)^;
-  var lThreadStarted: ^Void := ^^Void(@aThreadStarted)^;
-  var lThreadFinished: ^Void := ^^Void(@aThreadFinished)^;
-  var lThreadRenamed: ^Void := ^^Void(@aThreadRenamed)^;
-  var lProcessTerminated: ^Void := ^^Void(@aProcessTerminated)^;
-  var lProcessStarted: ^Void := ^^Void(@aProcessStarted)^;
-  var lProcessReady: ^Void := ^^Void(@aProcessReady)^;
-  var lProcessFailedToStart: ^Void := ^^Void(@aProcessFailedToStart)^;
-  var lLog: ^Void := ^^Void(@aLog)^;
-  var lSTDOut: ^Void := ^^Void(@aSTDOut)^;
-  var lSTDErr: ^Void := ^^Void(@aSTDErr)^;
-  var lBreakStop: ^Void := ^^Void(@aBreakStop)^;
-  var lBreakpointResolved: ^Void := ^^Void(@aBreakpointResolved)^;
-  var lBreakpointSignal: ^Void := ^^Void(@aBreakpointSignal)^;
-  var lRemoteFileNeeded: ^Void := ^^Void(@aRemoteFileNeeded)^;
-  var lBreakException: ^Void := ^^Void(@aBreakException)^;
-  var lDisposed: ^Void := ^^Void(@aDisposed)^;
-  var lModuleLoad: ^Void := ^^Void(@aModuleLoad)^;
-  var lModuleUnload: ^Void := ^^Void(@aModuleUnload)^;
-
-  exit lFunc(aDebugEngine, aUserData,
-             lDebugProgress,
-             lThreadStarted,
-             lThreadFinished,
-             lThreadRenamed,
-             lProcessTerminated,
-             lProcessStarted,
-             lProcessReady,
-             lProcessFailedToStart,
-             lLog,
-             lSTDOut,
-             lSTDErr,
-             lBreakStop,
-             lBreakpointResolved,
-             lBreakpointSignal,
-             lRemoteFileNeeded,
-             lBreakException,
-             lDisposed,
-             lModuleLoad,
-             lModuleUnload);
+  var lDelegate := MZCoreRuntime.sharedInstance.createDelegate(aAssemblyName, aTypeName, aMethodName);
+  var lAttach: function(aTarget, aUserData, aCallbackTable: ^Void): ^Void;
+  ^^Void(@lAttach)^ := lDelegate;
+  result := lAttach(aTarget, aUserData, aCallbackTable);
 end;
 
 end.

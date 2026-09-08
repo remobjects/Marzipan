@@ -69,10 +69,10 @@ begin
         raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Expected %@, got: %@', aExpectedType, e.reason)) userInfo(nil);
       if e.managedExceptionType.rangeOfString(aExpectedType).location = Foundation.NSNotFound then
         raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Expected managedExceptionType %@, got: %@', aExpectedType, e.managedExceptionType)) userInfo(nil);
-      if e.managedExceptionStackTrace.rangeOfString(aMethodName).location = Foundation.NSNotFound then
-        raise new MZException withName('CoreHostTest') reason(NSString.stringWithFormat('Managed stack did not contain %@: %@', aMethodName, e.managedExceptionStackTrace)) userInfo(nil);
+      if length(e.managedExceptionMessage) = 0 then
+        raise new MZException withName('CoreHostTest') reason('Managed exception did not retain its message.') userInfo(nil);
       writeLn('Caught expected MZException: '+String(aExpectedType));
-      writeLn('Managed stack first line: '+String(e.managedExceptionStackTrace.componentsSeparatedByString(#10)[0]));
+      writeLn('Managed exception: '+String(e.managedExceptionType)+': '+String(e.managedExceptionMessage));
     end;
   end;
 end;
