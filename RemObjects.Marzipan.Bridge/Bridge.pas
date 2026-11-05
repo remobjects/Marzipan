@@ -222,6 +222,9 @@ type
   [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
   DebugProgressCallback = public delegate(aUserData: IntPtr; aPercentage: Integer; aMessage: IntPtr);
 
+  [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+  AttachCallbackTableDelegate = assembly delegate(aDebugEngine, aUserData, aCallbackTable: IntPtr): IntPtr;
+
   DebugEngineCallbackBridge = assembly class
   private
     fDebugEngine: Object;
@@ -257,6 +260,10 @@ type
 
   DebugEngineCallbackHelpers = public static class
   public
+    // Keep the native entry point in Core while the debugger implementation targets Standard.
+    [UnmanagedCallersOnly(EntryPoint := 'MZ_DebugEngine_AttachCallbackTable')]
+    class method AttachCallbackTable(aDebugEngine, aUserData, aCallbackTable: IntPtr): IntPtr;
+
     [UnmanagedCallersOnly(EntryPoint := 'MZ_DebugEngine_AttachCallbacks')]
     class method AttachCallbacks(aDebugEngine: IntPtr; aUserData: IntPtr; aDebugProgress: IntPtr; aThreadStarted: IntPtr; aThreadFinished: IntPtr; aThreadRenamed: IntPtr; aProcessTerminated: IntPtr; aProcessStarted: IntPtr; aProcessReady: IntPtr; aProcessFailedToStart: IntPtr; aLog: IntPtr; aStdOut: IntPtr; aStdErr: IntPtr; aBreakStop: IntPtr; aBreakpointResolved: IntPtr; aBreakpointSignal: IntPtr; aRemoteFileNeeded: IntPtr; aBreakException: IntPtr; aDisposed: IntPtr; aModuleLoad: IntPtr; aModuleUnload: IntPtr): IntPtr;
   end;
@@ -1209,6 +1216,38 @@ begin
   except
     // Diagnostics must never be able to break debugger startup.
   end;
+end;
+
+class method DebugEngineCallbackHelpers.AttachCallbackTable(aDebugEngine, aUserData, aCallbackTable: IntPtr): IntPtr;
+begin
+  result := Safe.Value<IntPtr>(method begin
+    if (aDebugEngine = IntPtr.Zero) or (aCallbackTable = IntPtr.Zero) then
+      exit IntPtr.Zero;
+    var lType: System.Type := nil;
+    try
+      lType := RuntimeState.ResolveType('RemObjects.Elements.CoreDebugEngine', 'RemObjects.Elements.Debugger.DebugEngineCoreCallbackBridgeExports');
+    except
+      on e: TypeLoadException do begin
+        // Older compiler payloads can predate the typed callback-table helper.
+      end;
+    end;
+    var lMethod := lType:GetMethod('AttachCallbacks', BindingFlags.Public or BindingFlags.Static);
+    if lMethod = nil then begin
+      var lBridge := new DebugEngineCallbackBridge(Handles.Target(aDebugEngine), aUserData,
+        Marshal.ReadIntPtr(aCallbackTable, 0 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 1 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 2 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 3 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 4 * IntPtr.Size),
+        Marshal.ReadIntPtr(aCallbackTable, 5 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 6 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 7 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 8 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 9 * IntPtr.Size),
+        Marshal.ReadIntPtr(aCallbackTable, 10 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 11 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 12 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 13 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 14 * IntPtr.Size),
+        Marshal.ReadIntPtr(aCallbackTable, 15 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 16 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 17 * IntPtr.Size), Marshal.ReadIntPtr(aCallbackTable, 18 * IntPtr.Size));
+      lBridge.Attach();
+      exit Handles.Alloc(lBridge);
+    end;
+    // Pre-convergence Core compilers expose a native-only method; Standard exposes a managed method.
+    if lMethod.IsDefined(typeOf(UnmanagedCallersOnlyAttribute), false) then begin
+      var lAttach := Marshal.GetDelegateForFunctionPointer(lMethod.MethodHandle.GetFunctionPointer, typeOf(AttachCallbackTableDelegate)) as AttachCallbackTableDelegate;
+      exit lAttach(aDebugEngine, aUserData, aCallbackTable);
+    end;
+    result := IntPtr(lMethod.Invoke(nil, [aDebugEngine, aUserData, aCallbackTable]));
+  end, IntPtr.Zero);
 end;
 
 class method DebugEngineCallbackHelpers.AttachCallbacks(aDebugEngine: IntPtr; aUserData: IntPtr; aDebugProgress: IntPtr; aThreadStarted: IntPtr; aThreadFinished: IntPtr; aThreadRenamed: IntPtr; aProcessTerminated: IntPtr; aProcessStarted: IntPtr; aProcessReady: IntPtr; aProcessFailedToStart: IntPtr; aLog: IntPtr; aStdOut: IntPtr; aStdErr: IntPtr; aBreakStop: IntPtr; aBreakpointResolved: IntPtr; aBreakpointSignal: IntPtr; aRemoteFileNeeded: IntPtr; aBreakException: IntPtr; aDisposed: IntPtr; aModuleLoad: IntPtr; aModuleUnload: IntPtr): IntPtr;
